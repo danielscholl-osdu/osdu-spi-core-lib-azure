@@ -1,20 +1,20 @@
 include:
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'v0.4.0'
+    ref: 'v0.4.1'
     file: 'standard-setup.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'v0.4.0'
+    ref: 'v0.4.1'
     file: 'build/maven.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'v0.4.0'
+    ref: 'v0.4.1'
     file: 'scanners/gitlab-ultimate.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'v0.4.0'
+    ref: 'v0.4.1'
     file: 'scanners/fossa.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'v0.4.0'
+    ref: 'v0.4.1'
     file: 'publishing/pages.yml'
