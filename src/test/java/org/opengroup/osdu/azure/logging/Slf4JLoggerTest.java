@@ -14,6 +14,7 @@
 
 package org.opengroup.osdu.azure.logging;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -23,17 +24,14 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.opengroup.osdu.core.common.logging.audit.AuditPayload;
 import org.opengroup.osdu.core.common.model.http.HeadersToLog;
 import org.opengroup.osdu.core.common.model.http.Request;
-import org.slf4j.Logger;
 
+import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
 
-import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.doNothing;
-import static org.mockito.Mockito.times;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 /**
  * Contains tests for {@link Slf4JLogger}
@@ -52,13 +50,13 @@ public class Slf4JLoggerTest {
     private AuditPayload auditPayload;
 
     @Mock
-    private Slf4jLoggerFactory slf4jLoggerFactory;
+    private CoreLoggerFactory coreLoggerFactory;
 
     @Mock
     private Request request;
 
     @Mock
-    private Logger logger;
+    private CoreLogger coreLogger;
 
     @Mock
     private Exception e;
@@ -68,135 +66,169 @@ public class Slf4JLoggerTest {
     @InjectMocks
     Slf4JLogger slf4JLogger;
 
+    /**
+     * Workaround for inability to mock static methods like getInstance().
+     *
+     * @param mock CoreLoggerFactory mock instance
+     */
+    private void mockSingleton(CoreLoggerFactory mock) {
+        try {
+            Field instance = CoreLoggerFactory.class.getDeclaredField("instance");
+            instance.setAccessible(true);
+            instance.set(instance, mock);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Reset workaround for inability to mock static methods like getInstance().
+     */
+    private void resetSingleton() {
+        try {
+            Field instance = CoreLoggerFactory.class.getDeclaredField("instance");
+            instance.setAccessible(true);
+            instance.set(null, null);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     @BeforeEach
     public void setup() {
-        when(slf4jLoggerFactory.getLogger(any())).thenReturn(logger);
+        mockSingleton(coreLoggerFactory);
+        when(coreLoggerFactory.getLogger(anyString())).thenReturn(coreLogger);
         when(headersToLog.createStandardLabelsFromMap(eq(headers))).thenReturn(headers);
+    }
+
+    @AfterEach
+    public void takeDown() {
+        resetSingleton();
     }
 
     @Test
     public void testAudit() {
-        doNothing().when(logger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(auditPayload), eq(headers));
+        doNothing().when(coreLogger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(auditPayload), eq(headers));
         slf4JLogger.audit(LOG_PREFIX, auditPayload, headers);
-        verify(logger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(auditPayload), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
+        verify(coreLogger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(auditPayload), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testAuditWithLoggerName() {
-        doNothing().when(logger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(auditPayload), eq(headers));
+        doNothing().when(coreLogger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(auditPayload), eq(headers));
         slf4JLogger.audit(LOGGER_NAME, LOG_PREFIX, auditPayload, headers);
-        verify(logger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(auditPayload), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
+        verify(coreLogger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(auditPayload), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testRequest() {
-        doNothing().when(logger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(request), eq(headers));
+        doNothing().when(coreLogger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(request), eq(headers));
         slf4JLogger.request(LOG_PREFIX, request, headers);
-        verify(logger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(request), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
+        verify(coreLogger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(request), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testRequestWithLoggerName() {
-        doNothing().when(logger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(request), eq(headers));
+        doNothing().when(coreLogger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(request), eq(headers));
         slf4JLogger.request(LOGGER_NAME, LOG_PREFIX, request, headers);
-        verify(logger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(request), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
+        verify(coreLogger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(request), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testInfo() {
-        doNothing().when(logger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        doNothing().when(coreLogger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
         slf4JLogger.info(LOG_PREFIX, LOG_MESSAGE, headers);
-        verify(logger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
+        verify(coreLogger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testInfoWithLoggerName() {
-        doNothing().when(logger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        doNothing().when(coreLogger).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
         slf4JLogger.info(LOGGER_NAME, LOG_PREFIX, LOG_MESSAGE, headers);
-        verify(logger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
+        verify(coreLogger, times(1)).info(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testWarning() {
-        doNothing().when(logger).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        doNothing().when(coreLogger).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
         slf4JLogger.warning(LOG_PREFIX, LOG_MESSAGE, headers);
-        verify(logger, times(1)).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
+        verify(coreLogger, times(1)).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testWarningWithLoggerName() {
-        doNothing().when(logger).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        doNothing().when(coreLogger).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
         slf4JLogger.warning(LOGGER_NAME, LOG_PREFIX, LOG_MESSAGE, headers);
-        verify(logger, times(1)).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
+        verify(coreLogger, times(1)).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testWarningWithException() {
-        doNothing().when(logger).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
+        doNothing().when(coreLogger).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
         slf4JLogger.warning(LOG_PREFIX, LOG_MESSAGE, e, headers);
-        verify(logger, times(1)).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
+        verify(coreLogger, times(1)).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testWarningWithExceptionAndLoggerName() {
-        doNothing().when(logger).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
+        doNothing().when(coreLogger).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
         slf4JLogger.warning(LOGGER_NAME, LOG_PREFIX, LOG_MESSAGE, e, headers);
-        verify(logger, times(1)).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
+        verify(coreLogger, times(1)).warn(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testError() {
-        doNothing().when(logger).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        doNothing().when(coreLogger).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
         slf4JLogger.error(LOG_PREFIX, LOG_MESSAGE, headers);
-        verify(logger, times(1)).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
+        verify(coreLogger, times(1)).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testErrorWithLoggerName() {
-        doNothing().when(logger).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        doNothing().when(coreLogger).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
         slf4JLogger.error(LOGGER_NAME, LOG_PREFIX, LOG_MESSAGE, headers);
-        verify(logger, times(1)).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
+        verify(coreLogger, times(1)).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testErrorWithException() {
-        doNothing().when(logger).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
+        doNothing().when(coreLogger).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
         slf4JLogger.error(LOG_PREFIX, LOG_MESSAGE, e, headers);
-        verify(logger, times(1)).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
+        verify(coreLogger, times(1)).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(DEFAULT_LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 
     @Test
     public void testErrorWithExceptionAndLoggerName() {
-        doNothing().when(logger).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
+        doNothing().when(coreLogger).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
         slf4JLogger.error(LOGGER_NAME, LOG_PREFIX, LOG_MESSAGE, e, headers);
-        verify(logger, times(1)).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
-        verify(slf4jLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
+        verify(coreLogger, times(1)).error(eq("{} {} {}"), eq(LOG_PREFIX), eq(LOG_MESSAGE), eq(headers), eq(e));
+        verify(coreLoggerFactory, times(1)).getLogger(eq(LOGGER_NAME));
         verify(headersToLog, times(1)).createStandardLabelsFromMap(eq(headers));
     }
 }

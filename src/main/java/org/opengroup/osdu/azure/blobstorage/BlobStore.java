@@ -14,22 +14,26 @@
 
 package org.opengroup.osdu.azure.blobstorage;
 
+import com.azure.core.util.polling.SyncPoller;
 import com.azure.storage.blob.BlobContainerClient;
 import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.models.BlobCopyInfo;
 import com.azure.storage.blob.models.BlobErrorCode;
 import com.azure.storage.blob.models.BlobStorageException;
+import com.azure.storage.blob.sas.BlobContainerSasPermission;
+import com.azure.storage.blob.sas.BlobSasPermission;
+import com.azure.storage.blob.sas.BlobServiceSasSignatureValues;
 import com.azure.storage.blob.specialized.BlockBlobClient;
 import org.opengroup.osdu.core.common.logging.ILogger;
 import org.opengroup.osdu.core.common.model.http.AppException;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.OffsetDateTime;
 import java.util.Collections;
 
 /**
@@ -40,7 +44,7 @@ import java.util.Collections;
  *      @Autowired
  *      private BlobStore blobStore;
  *
- *      String readFromStorageContainerExamole()
+ *      String readFromStorageContainerExample()
  *      {
  *          String content = blobStorage.readFromStorageContainer("dataPartitionId", "filePath", "containerName");
  *          if (content != null)
@@ -56,19 +60,36 @@ import java.util.Collections;
  *      {
  *          Boolean success = blobStorage.deleteFromStorageContainer("dataPartitionId", "filePath", "containerName");
  *      }
+ *
+ *      void getSasTokenExample()
+ *      {
+ *          int expiryDays = 7;
+ *          OffsetDateTime expiryTime = OffsetDateTime.now().plusDays(expiryDays);
+ *          BlobSasPermission permissions = (new BlobSasPermission()).setReadPermission(true).setCreatePermission(true);
+ *          String sasToken = blobStorage.getSasToken("dataPartitionId", "filePath", "containerName", expiryTime, permissions);
+ *      }
+ *
+ *      void copyFileExample()
+ *      {
+ *          BlobCopyInfo copyInfo = blobStore.copyFile("dataPartitionId", "filePath", "containerName", "sourceFilePath");
+ *          System.out.println("copy info " + copyInfo.getCopyStatus());
+ *      }
  * }
  * </pre>
  */
-
-@Component
-@ConditionalOnProperty(value = "azure.blobStore.required", havingValue = "true", matchIfMissing = false)
 public class BlobStore {
-
-    @Autowired
     private IBlobServiceClientFactory blobServiceClientFactory;
-
-    @Autowired
     private ILogger logger;
+
+    /**
+     * Constructor to create BlobStore.
+     * @param factory Factory that provides blob client.
+     * @param loggerInstance logger instance to be used for logging.
+     */
+    public BlobStore(final IBlobServiceClientFactory factory, final ILogger loggerInstance) {
+        this.blobServiceClientFactory = factory;
+        this.logger = loggerInstance;
+    }
 
     private static final String LOG_PREFIX = "azure-core-lib";
 
@@ -145,6 +166,86 @@ public class BlobStore {
         } catch (IOException ex) {
             throw handleBlobStoreException(500, String.format("Malformed document for item with name=%s", filePath), ex);
         }
+    }
+
+    /**
+     * @param dataPartitionId Data partition id
+     * @param filePath        Path of file (blob) for which SAS token needs to be generated
+     * @param containerName   Name of the storage container
+     * @param expiryTime      Time after which the token expires
+     * @param permissions     Permissions for the given blob
+     * @return SAS token for the given blob
+     */
+    public String getSasToken(final String dataPartitionId, final String filePath, final String containerName, final OffsetDateTime expiryTime, final BlobSasPermission permissions) {
+        BlobContainerClient blobContainerClient = getBlobContainerClient(dataPartitionId, containerName);
+        BlockBlobClient blockBlobClient = blobContainerClient.getBlobClient(filePath).getBlockBlobClient();
+        return generateSASToken(blockBlobClient, expiryTime, permissions);
+    }
+
+    /**
+     * @param dataPartitionId Data partition id
+     * @param filePath        Path of file (blob) for which SAS token needs to be generated
+     * @param containerName   Name of the storage container
+     * @param expiryTime      Time after which the token expires
+     * @param permissions     Permissions for the given blob
+     * @return Generates Pre-Signed URL for a given blob.
+     */
+    public String generatePreSignedURL(final String dataPartitionId, final String filePath, final String containerName, final OffsetDateTime expiryTime, final BlobSasPermission permissions) {
+        BlobContainerClient blobContainerClient = getBlobContainerClient(dataPartitionId, containerName);
+        BlockBlobClient blockBlobClient = blobContainerClient.getBlobClient(filePath).getBlockBlobClient();
+        return blockBlobClient.getBlobUrl() + "?" + generateSASToken(blockBlobClient, expiryTime, permissions);
+    }
+
+    /**
+     * Generates pre-signed url to a blob container.
+     * @param dataPartitionId data partition id
+     * @param containerName Name of the storage container
+     * @param expiryTime Time after which the token expires
+     * @param permissions permissions for the given container
+     * @return Generates pre-signed url for a given container
+     */
+    public String generatePreSignedURL(final String dataPartitionId, final String containerName, final OffsetDateTime expiryTime, final BlobContainerSasPermission permissions) {
+        BlobContainerClient blobContainerClient = getBlobContainerClient(dataPartitionId, containerName);
+        return blobContainerClient.getBlobContainerUrl() + "?" + generateSASToken(blobContainerClient, expiryTime, permissions);
+    }
+
+    /**
+     * Method is used to copy a file specified at Source URL to the provided destination.
+     * @param dataPartitionId Data partition id
+     * @param filePath        Path of file (blob) to which the file has to be copied
+     * @param containerName   Name of the storage container
+     * @param sourceUrl       URL of the file from where the file contents have to be copied
+     * @return Blob Copy Final Result.
+     */
+    public BlobCopyInfo copyFile(final String dataPartitionId, final String filePath, final String containerName,
+                         final String sourceUrl) {
+        BlobContainerClient blobContainerClient = getBlobContainerClient(dataPartitionId, containerName);
+        BlockBlobClient blockBlobClient = blobContainerClient.getBlobClient(filePath).getBlockBlobClient();
+
+        SyncPoller<BlobCopyInfo, Void> result = blockBlobClient.beginCopy(sourceUrl, Duration.ofSeconds(1));
+        return result.waitForCompletion().getValue();
+    }
+    /**
+     *
+     * @param blockBlobClient Blob client
+     * @param expiryTime Time after which SAS Token expires
+     * @param permissions Permissions for the given blob
+     * @return Generates SAS Token.
+     */
+    private String generateSASToken(final BlockBlobClient blockBlobClient, final OffsetDateTime expiryTime, final BlobSasPermission permissions) {
+        BlobServiceSasSignatureValues blobServiceSasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, permissions);
+        return blockBlobClient.generateSas(blobServiceSasSignatureValues);
+    }
+
+    /**
+     * @param client Container client
+     * @param expiryTime Time after which SAS Token expires
+     * @param permissions Permissions for the given container
+     * @return Generates SAS Token.
+     */
+    private String generateSASToken(final BlobContainerClient client, final OffsetDateTime expiryTime, final BlobContainerSasPermission permissions) {
+        BlobServiceSasSignatureValues blobServiceSasSignatureValues = new BlobServiceSasSignatureValues(expiryTime, permissions);
+        return client.generateSas(blobServiceSasSignatureValues);
     }
 
     /**

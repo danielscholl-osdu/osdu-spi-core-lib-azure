@@ -21,27 +21,28 @@ import org.opengroup.osdu.azure.cache.BlobServiceClientCache;
 import org.opengroup.osdu.azure.partition.PartitionInfoAzure;
 import org.opengroup.osdu.azure.partition.PartitionServiceClient;
 import org.opengroup.osdu.common.Validators;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
 
 /**
  * Implementation for IBlobServiceClientFactory.
  */
-@Component
-@Lazy
-@ConditionalOnProperty(value = "azure.blobStore.required", havingValue = "true", matchIfMissing = false)
 public class BlobServiceClientFactoryImpl implements IBlobServiceClientFactory {
-
-    @Autowired
     private DefaultAzureCredential defaultAzureCredential;
-
-    @Autowired
     private PartitionServiceClient partitionService;
-
-    @Autowired
     private BlobServiceClientCache clientCache;
+
+    /**
+     * Constructor to initialize instance of {@link BlobServiceClientFactoryImpl}.
+     * @param credentials Azure Credentials to use
+     * @param partitionServiceClient Partition service client to use
+     * @param blobServiceClientCache Blob service client cache to use
+     */
+    public BlobServiceClientFactoryImpl(final DefaultAzureCredential credentials,
+                                        final PartitionServiceClient partitionServiceClient,
+                                        final BlobServiceClientCache blobServiceClientCache) {
+        this.defaultAzureCredential = credentials;
+        this.partitionService = partitionServiceClient;
+        this.clientCache = blobServiceClientCache;
+    }
 
     /**
      * @param dataPartitionId data partition id.

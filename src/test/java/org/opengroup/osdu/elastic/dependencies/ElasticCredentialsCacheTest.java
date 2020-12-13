@@ -16,13 +16,14 @@ package org.opengroup.osdu.elastic.dependencies;
 
 import org.junit.jupiter.api.Test;
 import org.opengroup.osdu.azure.cache.ElasticCredentialsCache;
+import org.opengroup.osdu.azure.cache.ElasticCredentialsCacheImpl;
 import org.opengroup.osdu.core.common.model.search.ClusterSettings;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 class ElasticCredentialsCacheTest {
-    private ElasticCredentialsCache cache = new ElasticCredentialsCache(10000, 10000);
+    private ElasticCredentialsCache cache = new ElasticCredentialsCacheImpl(10000, 10000);
 
     @Test
     void put_thenGet_works() {

@@ -14,86 +14,28 @@
 
 package org.opengroup.osdu.azure.cache;
 
-import org.opengroup.osdu.core.common.cache.VmCache;
 import org.opengroup.osdu.core.common.model.search.ClusterSettings;
 import org.opengroup.osdu.core.common.provider.interfaces.IElasticCredentialsCache;
-import org.springframework.context.annotation.Lazy;
-import org.springframework.stereotype.Component;
-
-import javax.inject.Named;
 
 /**
- * Elastic credential cache used by the Azure implementation of OSDU.
+ * abstract class for Elastic credential cache.
  */
-@Component
-@Lazy
-public class ElasticCredentialsCache implements IElasticCredentialsCache<String, ClusterSettings> {
+public abstract class ElasticCredentialsCache implements IElasticCredentialsCache<String, ClusterSettings> {
 
-    /**
-     * Underlying cache.
-     */
-    private VmCache<String, ClusterSettings> cache;
+  /**
+   * @param key cache key
+   * @return true if found in cache
+   */
+  public boolean containsKey(final String key) {
+    return get(key) != null;
+  }
 
-    /**
-     * @param cacheExpirationMinutes The cache expiration time, in minutes.
-     * @param maxCachedObjectEntries The max number of objects that can be in the cache.
-     */
-    public ElasticCredentialsCache(
-            @Named("ELASTIC_CACHE_EXPIRATION") final Integer cacheExpirationMinutes,
-            @Named("MAX_CACHE_VALUE_SIZE") final Integer maxCachedObjectEntries) {
-        cache = new VmCache<>(cacheExpirationMinutes * 60, maxCachedObjectEntries);
-    }
-
-    /**
-     * @param s Key of item to insert.
-     * @param o The data to insert.
-     */
-    @Override
-    public void put(final String s, final ClusterSettings o) {
-        cache.put(s, o);
-    }
-
-    /**
-     * @param s The cache key.
-     * @return The data cached with that key.
-     */
-    @Override
-    public ClusterSettings get(final String s) {
-        return cache.get(s);
-    }
-
-    /**
-     * Delete an item from the cache.
-     *
-     * @param s The key to use for the delete operation.
-     */
-    @Override
-    public void delete(final String s) {
-        cache.delete(s);
-    }
-
-    /**
-     * Clear all items from the cache.
-     */
-    @Override
-    public void clearAll() {
-        cache.clearAll();
-    }
-
-    /**
-     * @param key cache key
-     * @return true if found in cache
-     */
-    public boolean containsKey(final String key) {
-        return this.get(key) != null;
-    }
-
-    /**
-     * @param partitionId the tenant for which the request should be cached for.
-     * @return cache key for the tenant.
-     */
-    public String getCacheKey(final String partitionId) {
-        return String.format("%s-clusterSettings", partitionId);
-    }
+  /**
+   * @param partitionId the tenant for which the request should be cached for.
+   * @return cache key for the tenant.
+   */
+  public String getCacheKey(final String partitionId) {
+    return String.format("%s-clusterSettings", partitionId);
+  }
 }
 

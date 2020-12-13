@@ -21,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.opengroup.osdu.azure.cache.ElasticCredentialsCache;
+import org.opengroup.osdu.azure.cache.ElasticCredentialsCacheImpl;
 import org.opengroup.osdu.core.common.logging.JaxRsDpsLog;
 import org.opengroup.osdu.core.common.model.search.ClusterSettings;
 import org.opengroup.osdu.core.common.model.tenant.TenantInfo;
@@ -46,7 +47,7 @@ class ElasticClusterSettingsServiceTest {
     private JaxRsDpsLog log;
 
     @Spy
-    private ElasticCredentialsCache cache = new ElasticCredentialsCache(10000, 10000);
+    private ElasticCredentialsCache cache = new ElasticCredentialsCacheImpl(10000, 10000);
 
     @InjectMocks
     private ElasticClusterSettingsService esSettingsService;

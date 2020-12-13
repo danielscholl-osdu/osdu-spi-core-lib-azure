@@ -15,13 +15,12 @@
   ~ limitations under the License.
   -->
 
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/maven-v4_0_0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <groupId>org.opengroup.osdu</groupId>
   <artifactId>core-lib-azure</artifactId>
   <packaging>jar</packaging>
-  <version>0.0.39</version>
+  <version>0.0.48</version>
   <name>core-lib-azure</name>
 
   <properties>
@@ -34,16 +33,25 @@
     <junit.jupiter.version>5.6.0</junit.jupiter.version>
     <maven.surefire.version>2.22.2</maven.surefire.version>
     <javax.inject.version>1</javax.inject.version>
-    <azure.identity.version>1.0.1</azure.identity.version>
-    <azure.keyvault.version>4.1.0</azure.keyvault.version>
-    <azure.storage.version>12.3.0</azure.storage.version>
-    <azure.servicebus.version>3.1.4</azure.servicebus.version>
+    <azure.identity.version>1.1.3</azure.identity.version>
+    <azure.keyvault.version>4.2.2</azure.keyvault.version>
+    <azure.spring.data.cosmos.version>3.1.0</azure.spring.data.cosmos.version>
+    <azure.storage.version>12.8.0</azure.storage.version>
+    <azure.servicebus.version>3.4.0</azure.servicebus.version>
+    <azure.core.version>1.11.0</azure.core.version>
+    <azure.core.http.netty.version>1.6.2</azure.core.http.netty.version>
+    <azure.msal4j.version>1.7.1</azure.msal4j.version>
     <azure.appinsights.version>2.5.1</azure.appinsights.version>
     <azure.appinsights.log4j.version>2.5.1</azure.appinsights.log4j.version>
-    <azure.spring.boot.metric.version>2.0.7</azure.spring.boot.metric.version>
-    <reactor.version>0.9.0.RELEASE</reactor.version>
+    <azure.spring.boot.version>2.3.5</azure.spring.boot.version>
     <checkstyle.version>3.1.0</checkstyle.version>
-    <jackson.version>2.10.1</jackson.version>
+    <jackson.version>2.11.3</jackson.version>
+    <reactor.version>Dysprosium-SR12</reactor.version>
+    <netty.version>4.1.51.Final</netty.version>
+    <lombok.version>1.18.16</lombok.version>
+    <osdu.oscorecommon.version>0.3.18</osdu.oscorecommon.version>
+    <mockito-junit-jupiter.version>2.23.0</mockito-junit-jupiter.version>
+    <spring-boot-starter-log4j2.version>2.3.4.RELEASE</spring-boot-starter-log4j2.version>
   </properties>
 
   <licenses>
@@ -54,12 +62,76 @@
     </license>
   </licenses>
 
-  <dependencies>
+  <!-- List of managed dependencies to use a consistent set of version for Azure
+  and some common dependencies across all OSDU services. Each OSDU service can
+  inherit this list. -->
+  <dependencyManagement>
+    <dependencies>
+      <!-- Bill of materials to make sure a consistent set of
+      versions is used for Reactor 3 and Netty artifacts. -->
+      <dependency>
+        <groupId>io.projectreactor</groupId>
+        <artifactId>reactor-bom</artifactId>
+        <version>${reactor.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>com.azure</groupId>
+        <artifactId>azure-core</artifactId>
+        <version>${azure.core.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.azure</groupId>
+        <artifactId>azure-core-http-netty</artifactId>
+        <version>${azure.core.http.netty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.microsoft.azure</groupId>
+        <artifactId>msal4j</artifactId>
+        <version>${azure.msal4j.version}</version>
+      </dependency>
+      <!-- BOM for Azure Spring Boot Starters like azure-active-directory-spring-boot-starter,
+      azure-cosmosdb-spring-boot-starter etc. -->
+      <dependency>
+        <groupId>com.microsoft.azure</groupId>
+        <artifactId>azure-spring-boot-bom</artifactId>
+        <version>${azure.spring.boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.projectlombok</groupId>
+        <artifactId>lombok</artifactId>
+        <version>${lombok.version}</version>
+      </dependency>
+      <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson/jackson-bom -->
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
+  <dependencies>
     <dependency>
       <groupId>com.azure</groupId>
       <artifactId>azure-core-http-netty</artifactId>
-      <version>1.5.3</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
     </dependency>
 
     <!-- Spring dependencies -->
@@ -79,7 +151,7 @@
     <dependency>
       <groupId>org.opengroup.osdu</groupId>
       <artifactId>os-core-common</artifactId>
-      <version>0.3.18</version>
+      <version>${osdu.oscorecommon.version}</version>
       <exclusions>
         <exclusion>
           <groupId>org.springframework.boot</groupId>
@@ -107,7 +179,7 @@
     <dependency>
       <groupId>com.azure</groupId>
       <artifactId>azure-spring-data-cosmos</artifactId>
-      <version>3.0.0</version>
+      <version>${azure.spring.data.cosmos.version}</version>
     </dependency>
     <dependency>
       <groupId>com.azure</groupId>
@@ -129,19 +201,17 @@
     <dependency>
       <groupId>com.microsoft.azure</groupId>
       <artifactId>azure-spring-boot-metrics-starter</artifactId>
-      <version>${azure.spring.boot.metric.version}</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-log4j2</artifactId>
-      <version>2.3.4.RELEASE</version>
+      <version>${spring-boot-starter-log4j2.version}</version>
     </dependency>
     <dependency>
       <groupId>com.microsoft.azure</groupId>
       <artifactId>applicationinsights-logging-log4j2</artifactId>
       <version>${azure.appinsights.log4j.version}</version>
     </dependency>
-
 
 
     <!-- Other dependencies -->
@@ -161,26 +231,22 @@
     <dependency>
       <groupId>org.mockito</groupId>
       <artifactId>mockito-junit-jupiter</artifactId>
-      <version>2.23.0</version>
+      <version>${mockito-junit-jupiter.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
-      <version>${jackson.version}</version>
       <scope>test</scope>
     </dependency>
 
-    <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-core -->
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-core</artifactId>
-      <version>2.11.2</version>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
-      <version>${jackson.version}</version>
     </dependency>
   </dependencies>
 

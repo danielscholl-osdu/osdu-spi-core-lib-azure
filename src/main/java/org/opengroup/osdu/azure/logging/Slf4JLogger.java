@@ -22,6 +22,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
+
 import java.util.Map;
 
 /**
@@ -36,9 +37,6 @@ public final class Slf4JLogger implements ILogger {
     @Autowired
     private HeadersToLog headersToLog;
 
-    @Autowired
-    private Slf4jLoggerFactory slf4jLoggerFactory;
-
     @Override
     public void audit(final String logPrefix, final AuditPayload auditPayload, final Map<String, String> headers) {
         this.audit(DEFAULT_LOGGER_NAME, logPrefix, auditPayload, headers);
@@ -46,7 +44,7 @@ public final class Slf4JLogger implements ILogger {
 
     @Override
     public void audit(final String loggerName, final String logPrefix, final AuditPayload payload, final Map<String, String> headers) {
-        slf4jLoggerFactory.getLogger(loggerName).info("{} {} {}", logPrefix, payload,
+        CoreLoggerFactory.getInstance().getLogger(loggerName).info("{} {} {}", logPrefix, payload,
                 this.headersToLog.createStandardLabelsFromMap(headers));
     }
 
@@ -57,7 +55,7 @@ public final class Slf4JLogger implements ILogger {
 
     @Override
     public void request(final String loggerName, final String logPrefix, final Request request, final Map<String, String> headers) {
-        slf4jLoggerFactory.getLogger(loggerName).info("{} {} {}", logPrefix, request,
+        CoreLoggerFactory.getInstance().getLogger(loggerName).info("{} {} {}", logPrefix, request,
                 this.headersToLog.createStandardLabelsFromMap(headers));
     }
 
@@ -68,7 +66,7 @@ public final class Slf4JLogger implements ILogger {
 
     @Override
     public void info(final String loggerName, final String logPrefix, final String message, final Map<String, String> headers) {
-        slf4jLoggerFactory.getLogger(loggerName).info("{} {} {}", logPrefix, message,
+        CoreLoggerFactory.getInstance().getLogger(loggerName).info("{} {} {}", logPrefix, message,
                 this.headersToLog.createStandardLabelsFromMap(headers));
     }
 
@@ -79,7 +77,7 @@ public final class Slf4JLogger implements ILogger {
 
     @Override
     public void warning(final String loggerName, final String logPrefix, final String message, final Map<String, String> headers) {
-        slf4jLoggerFactory.getLogger(loggerName).warn("{} {} {}", logPrefix, message,
+        CoreLoggerFactory.getInstance().getLogger(loggerName).warn("{} {} {}", logPrefix, message,
                 this.headersToLog.createStandardLabelsFromMap(headers));
     }
 
@@ -90,7 +88,7 @@ public final class Slf4JLogger implements ILogger {
 
     @Override
     public void warning(final String loggerName, final String logPrefix, final String message, final Exception ex, final Map<String, String> headers) {
-        slf4jLoggerFactory.getLogger(loggerName).warn("{} {} {}", logPrefix, message,
+        CoreLoggerFactory.getInstance().getLogger(loggerName).warn("{} {} {}", logPrefix, message,
                 this.headersToLog.createStandardLabelsFromMap(headers), ex);
     }
 
@@ -101,7 +99,7 @@ public final class Slf4JLogger implements ILogger {
 
     @Override
     public void error(final String loggerName, final String logPrefix, final String message, final Map<String, String> headers) {
-        slf4jLoggerFactory.getLogger(loggerName).error("{} {} {}", logPrefix, message,
+        CoreLoggerFactory.getInstance().getLogger(loggerName).error("{} {} {}", logPrefix, message,
                 this.headersToLog.createStandardLabelsFromMap(headers));
     }
 
@@ -113,7 +111,7 @@ public final class Slf4JLogger implements ILogger {
 
     @Override
     public void error(final String loggerName, final String logPrefix, final String message, final Exception ex, final Map<String, String> headers) {
-        slf4jLoggerFactory.getLogger(loggerName).error("{} {} {}", logPrefix, message,
+        CoreLoggerFactory.getInstance().getLogger(loggerName).error("{} {} {}", logPrefix, message,
                 this.headersToLog.createStandardLabelsFromMap(headers), ex);
     }
 
