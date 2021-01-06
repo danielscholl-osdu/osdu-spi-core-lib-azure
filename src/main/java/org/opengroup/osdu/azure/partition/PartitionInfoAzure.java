@@ -61,6 +61,12 @@ public class PartitionInfoAzure {
     @SerializedName("sb-namespace")
     private Property sbNamespaceConfig;
 
+    @SerializedName("eventgrid-recordstopic")
+    private Property eventGridRecordsTopicEndpointConfig;
+
+    @SerializedName("eventgrid-recordstopic-accesskey")
+    private Property eventGridRecordsTopicAccessKeyConfig;
+
     private Property servicePrincipalAppIdConfig = Property.builder().value("app-dev-sp-username").sensitive(true).build();
 
     private SecretClient secretClient;
@@ -204,6 +210,26 @@ public class PartitionInfoAzure {
             return getSecret(this.getStorageAccountNameConfig());
         }
         return String.valueOf(this.getStorageAccountNameConfig().getValue());
+    }
+
+    /**
+     * @return partition event grid topic endpoint
+     */
+    public String getEventGridRecordsTopicEndpoint() {
+        if (this.getEventGridRecordsTopicEndpointConfig().isSensitive()) {
+            return getSecret(this.getEventGridRecordsTopicEndpointConfig());
+        }
+        return String.valueOf(this.getEventGridRecordsTopicEndpointConfig().getValue());
+    }
+
+    /**
+     * @return partition event grid topic key
+     */
+    public String getEventGridRecordsTopicAccessKey() {
+        if (this.getEventGridRecordsTopicAccessKeyConfig().isSensitive()) {
+            return getSecret(this.getEventGridRecordsTopicAccessKeyConfig());
+        }
+        return String.valueOf(this.getEventGridRecordsTopicAccessKeyConfig().getValue());
     }
 
     /**

@@ -30,7 +30,7 @@ import java.util.Set;
  * Checks if slf4j got bound with log4j2 correctly.
  */
 @Component
-@ConditionalOnProperty(value = "logging.checkSlf4jBinding.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(value = "logging.checkSlf4jBinding.enabled", havingValue = "true", matchIfMissing = true)
 public class Slf4JBindingChecker {
 
     private final String staticLoggerBinderPath = "org/slf4j/impl/StaticLoggerBinder.class";

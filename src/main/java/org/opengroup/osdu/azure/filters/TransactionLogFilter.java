@@ -36,7 +36,7 @@ import java.util.function.Function;
  * For logging start and end of request.
  */
 @Component
-@ConditionalOnProperty(value = "logging.transaction.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(value = "logging.transaction.enabled", havingValue = "true", matchIfMissing = true)
 public final class TransactionLogFilter implements Filter {
     private static final String LOGGER_NAME = "TxnLogger";
     private static final List<String> WHITELIST_HEADERS = Arrays.asList(

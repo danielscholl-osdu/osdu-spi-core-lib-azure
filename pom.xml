@@ -20,7 +20,7 @@
   <groupId>org.opengroup.osdu</groupId>
   <artifactId>core-lib-azure</artifactId>
   <packaging>jar</packaging>
-  <version>0.0.48</version>
+  <version>0.0.51</version>
   <name>core-lib-azure</name>
 
   <properties>
@@ -234,11 +234,6 @@
       <version>${mockito-junit-jupiter.version}</version>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>com.fasterxml.jackson.core</groupId>
-      <artifactId>jackson-databind</artifactId>
-      <scope>test</scope>
-    </dependency>
 
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -247,6 +242,11 @@
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.microsoft.azure</groupId>
+      <artifactId>azure-eventgrid</artifactId>
+      <version>1.2.0</version>
     </dependency>
   </dependencies>
 

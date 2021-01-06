@@ -219,7 +219,7 @@ The following software have components provided under the terms of this license:
 - jakarta.xml.bind-api (from )
 
 ========================================================================
-CC-BY-3.0
+CC-BY-2.5
 ========================================================================
 The following software have components provided under the terms of this license:
 
@@ -247,7 +247,6 @@ CDDL-1.0
 ========================================================================
 The following software have components provided under the terms of this license:
 
-- JavaBeans(TM) Activation Framework (from http://java.sun.com/javase/technologies/desktop/javabeans/jaf/index.jsp)
 - JavaMail API (from )
 - javax.annotation-api (from http://jcp.org/en/jsr/detail?id=250)
 
@@ -257,6 +256,7 @@ CDDL-1.1
 The following software have components provided under the terms of this license:
 
 - JavaBeans Activation Framework (from )
+- JavaBeans(TM) Activation Framework (from http://java.sun.com/javase/technologies/desktop/javabeans/jaf/index.jsp)
 - tomcat-embed-core (from http://tomcat.apache.org/)
 
 ========================================================================
@@ -389,6 +389,7 @@ The following software have components provided under the terms of this license:
 - Microsoft Azure SDK annotations (from https://github.com/Microsoft/java-api-annotations)
 - Microsoft Azure SDK for SQL API of Azure Cosmos DB Service (from https://github.com/Azure/azure-sdk-for-java)
 - Microsoft Azure SDK for Service Bus (from https://github.com/Azure/azure-sdk-for-java)
+- Microsoft Azure SDK for eventgrid (from https://github.com/Azure/azure-sdk-for-java)
 - Microsoft Azure client library for Blob Storage (from https://github.com/Azure/azure-sdk-for-java)
 - Microsoft Azure client library for Identity (from https://github.com/Azure/azure-sdk-for-java)
 - Microsoft Azure client library for KeyVault Secrets (from https://github.com/Azure/azure-sdk-for-java)
@@ -467,6 +468,7 @@ The following software have components provided under the terms of this license:
 - Microsoft Azure client library for Blob Storage (from https://github.com/Azure/azure-sdk-for-java)
 - Project Lombok (from https://projectlombok.org)
 - Spring Web (from https://github.com/spring-projects/spring-framework)
+- StAX API (from http://stax.codehaus.org/)
 - msal4j (from https://github.com/AzureAD/microsoft-authentication-library-for-java)
 - reactive-streams (from http://www.reactive-streams.org/)
 

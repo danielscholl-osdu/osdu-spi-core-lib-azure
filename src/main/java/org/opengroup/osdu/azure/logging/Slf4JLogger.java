@@ -30,7 +30,7 @@ import java.util.Map;
  */
 @Component
 @Primary
-@ConditionalOnProperty(value = "logging.slf4jlogger.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(value = "logging.slf4jlogger.enabled", havingValue = "true", matchIfMissing = true)
 public final class Slf4JLogger implements ILogger {
     private static final String DEFAULT_LOGGER_NAME = Slf4JLogger.class.getName();
 

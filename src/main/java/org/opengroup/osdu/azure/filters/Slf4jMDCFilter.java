@@ -27,7 +27,7 @@ import java.util.Map;
  * So now order of calling the filters becomes: OrderedRequestContextFilter --> MDC filter --> ... --> TransactionLogFilter
  */
 @Component
-@ConditionalOnProperty(value = "logging.mdccontext.enabled", havingValue = "true", matchIfMissing = false)
+@ConditionalOnProperty(value = "logging.mdccontext.enabled", havingValue = "true", matchIfMissing = true)
 @Order(-104)
 public class Slf4jMDCFilter implements Filter {
     @Autowired
@@ -35,22 +35,24 @@ public class Slf4jMDCFilter implements Filter {
 
     /**
      * Filter logic.
-     * @param servletRequest Request object.
+     *
+     * @param servletRequest  Request object.
      * @param servletResponse Response object.
-     * @param filterChain Filter Chain object.
+     * @param filterChain     Filter Chain object.
      * @throws IOException
      * @throws ServletException
      */
     @Override
     public void doFilter(final ServletRequest servletRequest, final ServletResponse servletResponse,
                          final FilterChain filterChain) throws IOException, ServletException {
+        MDC.clear();
         MDC.setContextMap(getContextMap());
         filterChain.doFilter(servletRequest, servletResponse);
-        MDC.clear();
     }
 
     /**
      * Method to create context map for mdc.
+     *
      * @return Context map.
      */
     private Map<String, String> getContextMap() {
