@@ -37,7 +37,7 @@
     <azure.appinsights.log4j.version>2.6.3</azure.appinsights.log4j.version>
     <azure.spring.boot.version>3.4.0</azure.spring.boot.version>
     <lombok.version>1.18.16</lombok.version>
-    <osdu.oscorecommon.version>0.9.0-rc13</osdu.oscorecommon.version>
+    <osdu.oscorecommon.version>0.9.0</osdu.oscorecommon.version>
     <azure-mgmt-eventgrid.version>1.0.0-beta-3</azure-mgmt-eventgrid.version>
     <azure-security-keyvault-keys.version>4.2.3</azure-security-keyvault-keys.version>
     <documentdb-bulkexecutor.version>2.12.0</documentdb-bulkexecutor.version>
