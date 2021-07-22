@@ -1,7 +1,8 @@
 # Enable Logging For Health Check Failures
 
 <ol>
-<li> Ensure instructions from doc <a ref="docs/01_Using_Common_Properties.md">01_Using_Common_Properties.md </a>of core-lib-azure is implemented.<br/>
+<li>Ensure your service is running with SpringBoot version 2.4  or higher</li>
+<li>Follow instructions from doc <a ref="docs/01_Using_Common_Properties.md">01_Using_Common_Properties.md </a>of core-lib-azure is implemented.<br/>
 This is to enable actuator to run on a different port.
 </li>
 <li> Define Liveness and Readiness probes:

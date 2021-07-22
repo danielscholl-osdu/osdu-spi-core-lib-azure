@@ -23,6 +23,7 @@ import org.springframework.boot.actuate.health.HealthContributorRegistry;
 import org.springframework.boot.actuate.health.HealthEndpointGroups;
 import org.springframework.boot.actuate.health.HealthEndpointWebExtension;
 import org.springframework.boot.actuate.health.Status;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Configuration;
 
 import java.util.Map;
@@ -32,6 +33,7 @@ import java.util.Map;
  * All services can pick up this class from core-lib-azure from the usual dependency that’s added.
  */
 @Configuration
+@ConditionalOnProperty(value = "azure.health.endpoint.enabled", havingValue = "true", matchIfMissing = false)
 public class AzureHealthEndpointWebExtension extends HealthEndpointWebExtension {
 
     private static final String LOGGER_NAME = AzureHealthEndpointWebExtension.class.getName();
