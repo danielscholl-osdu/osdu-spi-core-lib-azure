@@ -27,6 +27,7 @@ import org.opengroup.osdu.core.common.http.HttpResponse;
 import org.opengroup.osdu.core.common.http.UrlFetchServiceImpl;
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Primary;
 import org.springframework.stereotype.Component;
 
@@ -41,6 +42,7 @@ import static java.util.Arrays.asList;
  */
 @Primary
 @Component
+@ConditionalOnProperty(value = "requestScope.enabled", havingValue = "true", matchIfMissing = true)
 public class HttpClientAzure implements IHttpClient {
     private static final String LOGGER_NAME = HttpClientAzure.class.getName();
 
