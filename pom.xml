@@ -20,7 +20,7 @@
   <groupId>org.opengroup.osdu</groupId>
   <artifactId>core-lib-azure</artifactId>
   <packaging>jar</packaging>
-  <version>0.13.0-SNAPSHOT</version>
+  <version>0.13.1-SNAPSHOT</version>
   <name>core-lib-azure</name>
 
   <properties>
