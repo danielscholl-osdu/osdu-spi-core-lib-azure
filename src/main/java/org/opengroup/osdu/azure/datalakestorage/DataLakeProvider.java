@@ -15,6 +15,7 @@ package org.opengroup.osdu.azure.datalakestorage;
 
 import com.azure.identity.DefaultAzureCredential;
 import org.opengroup.osdu.azure.partition.PartitionServiceClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -22,6 +23,7 @@ import org.springframework.context.annotation.Configuration;
  * This is configuration bean to provide DataLakeStore component.
  */
 @Configuration
+@ConditionalOnProperty(value = "azure.datalakestorage.enabled", havingValue = "true", matchIfMissing = true)
 public class DataLakeProvider {
     /**
      * Creates instance of {@link IDataLakeClientFactory}.
