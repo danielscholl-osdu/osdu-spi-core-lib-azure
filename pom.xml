@@ -48,7 +48,8 @@
     <resilience4jVersion>1.7.0</resilience4jVersion>
 
     <azure-storage-file-datalake.version>12.6.0</azure-storage-file-datalake.version>
-    <azure-storage-blob.version>12.13.0</azure-storage-blob.version>
+    <azure-storage-blob.version>12.14.2</azure-storage-blob.version>
+    <azure-core.version>1.25.0</azure-core.version>
   </properties>
 
   <licenses>
@@ -64,6 +65,12 @@
   inherit this list. -->
   <dependencyManagement>
     <dependencies>
+      <!-- https://mvnrepository.com/artifact/com.azure/azure-core -->
+      <dependency>
+        <groupId>com.azure</groupId>
+        <artifactId>azure-core</artifactId>
+        <version>${azure-core.version}</version>
+      </dependency>
       <dependency>
         <!--
         This dependency is added here to override the version coming from Azure Spring boot bom.
@@ -170,20 +177,11 @@
     </dependency>
 
     <dependency>
-      <groupId>com.azure</groupId>
-      <artifactId>azure-storage-blob</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.microsoft.azure</groupId>
       <artifactId>azure-servicebus</artifactId>
       <version>${azure.servicebus.version}</version>
     </dependency>
 
-    <dependency>
-      <groupId>com.azure</groupId>
-      <artifactId>azure-storage-blob</artifactId>
-      <version>${azure-storage-blob.version}</version>
-    </dependency>
     <dependency>
       <groupId>com.azure</groupId>
       <artifactId>azure-storage-file-datalake</artifactId>
