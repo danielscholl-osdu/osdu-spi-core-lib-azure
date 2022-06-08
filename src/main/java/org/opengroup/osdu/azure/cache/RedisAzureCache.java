@@ -1,6 +1,9 @@
 package org.opengroup.osdu.azure.cache;
 
+import com.lambdaworks.redis.codec.CompressionCodec;
+import com.lambdaworks.redis.codec.RedisCodec;
 import org.opengroup.osdu.azure.di.RedisAzureConfiguration;
+import org.opengroup.osdu.core.common.cache.JsonCodec;
 import org.redisson.api.RedissonClient;
 import org.redisson.api.RLock;
 import org.opengroup.osdu.core.common.cache.IRedisCache;
@@ -152,6 +155,14 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
     public Long decrementBy(final K k, final long l) {
         IRedisCache<K, V> redisCache = redisClientFactory.getClient(keyClass, valueClass, redisConfiguration);
         return redisCache.decrementBy(k, l);
+    }
+
+    /**
+     * Get codec for performing encoding and decoding of key and values present in redis cache.
+     */
+    @Override
+    public RedisCodec<K, V> getCodec(final Class<K> classOfK, final Class<V> classOfV) {
+        return CompressionCodec.valueCompressor(new JsonCodec<>(classOfK, classOfV), CompressionCodec.CompressionType.GZIP);
     }
 
     /**

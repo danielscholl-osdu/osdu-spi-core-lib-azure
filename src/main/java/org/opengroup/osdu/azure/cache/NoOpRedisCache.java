@@ -1,5 +1,6 @@
 package org.opengroup.osdu.azure.cache;
 
+import com.lambdaworks.redis.codec.RedisCodec;
 import org.opengroup.osdu.azure.logging.CoreLoggerFactory;
 import org.opengroup.osdu.core.common.cache.IRedisCache;
 
@@ -77,6 +78,12 @@ public final class NoOpRedisCache<K, V> implements IRedisCache<K, V> {
     @Override
     public Long decrementBy(final K k, final long l) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - decrementBy");
+        return null;
+    }
+
+    @Override
+    public RedisCodec<K, V> getCodec(final Class<K> aClass, final Class<V> aClass1) {
+        CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - getCodec");
         return null;
     }
 }
