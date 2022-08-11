@@ -13,10 +13,12 @@
 //  limitations under the License.
 
 package org.opengroup.osdu.azure.health;
+import java.time.Duration;
 import org.opengroup.osdu.azure.logging.CoreLoggerFactory;
+import org.springframework.boot.actuate.endpoint.ApiVersion;
 import org.springframework.boot.actuate.endpoint.SecurityContext;
-import org.springframework.boot.actuate.endpoint.http.ApiVersion;
 import org.springframework.boot.actuate.endpoint.web.WebEndpointResponse;
+import org.springframework.boot.actuate.endpoint.web.WebServerNamespace;
 import org.springframework.boot.actuate.health.CompositeHealth;
 import org.springframework.boot.actuate.health.HealthComponent;
 import org.springframework.boot.actuate.health.HealthContributorRegistry;
@@ -41,23 +43,24 @@ public class AzureHealthEndpointWebExtension extends HealthEndpointWebExtension 
     /**
      * @param registry the HealthContributorRegistry
      * @param groups   the HealthEndpointGroups
+     * @param slowIndicatorLoggingThreshold Duration after which slow health indicator logging should occur
      */
-    public AzureHealthEndpointWebExtension(final HealthContributorRegistry registry, final HealthEndpointGroups groups) {
-        super(registry, groups);
-
+    public AzureHealthEndpointWebExtension(final HealthContributorRegistry registry, final HealthEndpointGroups groups, final Duration slowIndicatorLoggingThreshold) {
+        super(registry, groups, slowIndicatorLoggingThreshold);
     }
 
     /**
-     * @param apiVersion
-     * @param securityContext
-     * @param showAll
-     * @param path
-     * @return
+     * @param apiVersion      the Api Version
+     * @param serverNamespace the server namespace
+     * @param securityContext the security Context
+     * @param showAll         the boolean flag
+     * @param path            the path
+     * @return the webEndpointResponse object
      */
     @Override
-    public WebEndpointResponse<HealthComponent> health(final ApiVersion apiVersion, final SecurityContext securityContext,
+    public WebEndpointResponse<HealthComponent> health(final ApiVersion apiVersion,  final WebServerNamespace serverNamespace, final SecurityContext securityContext,
                                                        final boolean showAll, final String... path) {
-        WebEndpointResponse<HealthComponent> response = superClassCall(apiVersion, securityContext, showAll, path);
+        WebEndpointResponse<HealthComponent> response = superClassCall(apiVersion, serverNamespace, securityContext, showAll, path);
         HealthComponent health = response.getBody();
 
         Status status = health.getStatus();
@@ -77,13 +80,13 @@ public class AzureHealthEndpointWebExtension extends HealthEndpointWebExtension 
 
     /**
      * @param apiVersion      the Api Version
+     * @param serverNamespace the server namespace
      * @param securityContext the security Context
      * @param showAll         the boolean flag
      * @param path            the path
      * @return the webEndpointResponse object
      */
-    WebEndpointResponse<HealthComponent> superClassCall(final ApiVersion apiVersion, final SecurityContext securityContext, final boolean showAll, final String... path) {
-        return super.health(apiVersion, securityContext, showAll, path);
+    WebEndpointResponse<HealthComponent> superClassCall(final ApiVersion apiVersion,  final WebServerNamespace serverNamespace, final SecurityContext securityContext, final boolean showAll, final String... path) {
+        return super.health(apiVersion, serverNamespace, securityContext, showAll, path);
     }
-
 }

@@ -36,8 +36,8 @@
     <azure.appinsights.version>2.6.4</azure.appinsights.version>
     <azure.appinsights.log4j.version>2.6.4</azure.appinsights.log4j.version>
     <azure.spring.boot.version>3.4.0</azure.spring.boot.version>
-    <lombok.version>1.18.16</lombok.version>
-    <osdu.oscorecommon.version>0.16.0</osdu.oscorecommon.version>
+    <lombok.version>1.18.24</lombok.version>
+    <osdu.oscorecommon.version>0.16.1</osdu.oscorecommon.version>
     <azure-mgmt-eventgrid.version>1.0.0-beta-3</azure-mgmt-eventgrid.version>
     <azure-security-keyvault-keys.version>4.2.3</azure-security-keyvault-keys.version>
     <documentdb-bulkexecutor.version>2.12.0</documentdb-bulkexecutor.version>
@@ -47,6 +47,8 @@
     <azure-spring-data-cosmos.version>3.21.0</azure-spring-data-cosmos.version>
     <resilience4jVersion>1.7.0</resilience4jVersion>
     <redisson.version>3.15.3</redisson.version>
+    <jackson-databind.version>2.13.2.2</jackson-databind.version>
+    <commons-validator.version>1.7</commons-validator.version>
 
     <azure-storage-file-datalake.version>12.6.0</azure-storage-file-datalake.version>
     <azure-storage-blob.version>12.14.2</azure-storage-blob.version>
@@ -116,7 +118,7 @@
     <dependency>
       <groupId>commons-validator</groupId>
       <artifactId>commons-validator</artifactId>
-      <version>1.7</version>
+      <version>${commons-validator.version}</version>
     </dependency>
 
     <dependency>
@@ -252,7 +254,7 @@
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
-      <version>2.13.2.2</version>
+      <version>${jackson-databind.version}</version>
     </dependency>
     <dependency>
       <groupId>com.microsoft.azure</groupId>
