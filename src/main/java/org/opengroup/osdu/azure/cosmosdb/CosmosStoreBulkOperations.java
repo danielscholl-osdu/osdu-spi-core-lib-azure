@@ -23,7 +23,7 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Class to perform bulk Cosmos operations using DocumentBulkExecutor.
+ * Class to perform bulk Cosmos operations using DocumentBulkExecutor or CosmosClient.
  */
 @Component
 @Lazy
@@ -38,10 +38,10 @@ public class CosmosStoreBulkOperations {
     private ICosmosClientFactory cosmosClientFactory;
 
     /**
+     * Bulk upserts item into cosmos collection using DocumentBulkExecutor.
      *
-     * Bulk upserts item into cosmos collection.
      * @param dataPartitionId name of data partition.
-     * @param cosmosDBName name of Comsos db.
+     * @param cosmosDBName name of Cosmos db.
      * @param collectionName name of collection in Cosmos.
      * @param documents collection of JSON serializable documents.
      * @param isUpsert flag denoting if the isUpsert flag should be set to true.
@@ -81,11 +81,12 @@ public class CosmosStoreBulkOperations {
         }
     }
 
-    /***
-     * Partition Keys must be provides in the same order as records.
+    /**
+     * Bulk upserts item into cosmos collection using CosmosClient.
+     * Partition Keys must be provided in the same order as records.
      * ith Record's partition Key will be at ith position in the List.
      * @param dataPartitionId name of data partition.
-     * @param cosmosDBName name of Comsos db.
+     * @param cosmosDBName name of Cosmos db.
      * @param collectionName name of collection in Cosmos.
      * @param docs collection of JSON serializable documents.
      * @param partitionKeys List of partition keys corresponding to "docs" provided
@@ -106,7 +107,7 @@ public class CosmosStoreBulkOperations {
 
             List<CosmosItemOperation> cosmosItemOperations = new ArrayList<>();
             for (int i = 0; i < docs.size(); i++) {
-                cosmosItemOperations.add(CosmosBulkOperations.getCreateItemOperation(docs.get(i), new PartitionKey(partitionKeys.get(i))));
+                cosmosItemOperations.add(CosmosBulkOperations.getUpsertItemOperation(docs.get(i), new PartitionKey(partitionKeys.get(i))));
             }
 
             CosmosBulkExecutionOptions cosmosBulkExecutionOptions = new CosmosBulkExecutionOptions();
