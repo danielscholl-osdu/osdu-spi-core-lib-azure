@@ -1,24 +1,24 @@
 include:
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'release/0.16'
+    ref: 'v0.16.3'
     file: 'standard-setup.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'release/0.16'
+    ref: 'v0.16.3'
     file: 'build/maven.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'release/0.16'
+    ref: 'v0.16.3'
     file: 'scanners/gitlab-ultimate.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'release/0.16'
+    ref: 'v0.16.3'
     file: 'scanners/fossa-maven.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'release/0.16'
+    ref: 'v0.16.3'
     file: 'release/maven-release-candidates.yml'
 
   - project: 'osdu/platform/ci-cd-pipelines'
-    ref: 'release/0.16'
+    ref: 'v0.16.3'
     file: 'publishing/pages.yml'
