@@ -15,10 +15,13 @@
 package org.opengroup.osdu.azure.publisherFacade;
 
 import com.google.common.base.Preconditions;
+import org.opengroup.osdu.core.common.model.http.CollaborationContext;
 import org.opengroup.osdu.core.common.model.http.DpsHeaders;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+
+import java.util.Optional;
 
 /**
  * Implementation of message publisher.
@@ -34,13 +37,14 @@ public class MessagePublisher {
     private PubsubConfiguration pubsubConfiguration;
 
     /**
-     * @param publisherInfo Contains publisher data and info
-     * @param headers       DpsHeaders
+     * @param publisherInfo        Contains publisher data and info
+     * @param headers              DpsHeaders
+     * @param collaborationContext CollaborationContext
      */
-    public void publishMessage(final DpsHeaders headers, final PublisherInfo publisherInfo) {
+    public void publishMessage(final DpsHeaders headers, final PublisherInfo publisherInfo, final Optional<CollaborationContext> collaborationContext) {
         Preconditions.checkNotNull(publisherInfo.getBatch());
         if (Boolean.parseBoolean(pubsubConfiguration.getIsServiceBusEnabled())) {
-            serviceBusPublisher.publishToServiceBus(headers, publisherInfo);
+            serviceBusPublisher.publishToServiceBus(headers, publisherInfo, collaborationContext);
         }
         if (Boolean.parseBoolean(pubsubConfiguration.getIsEventGridEnabled())) {
             eventGridPublisher.publishToEventGrid(headers, publisherInfo);
