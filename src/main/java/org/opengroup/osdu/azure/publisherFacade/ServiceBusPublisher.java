@@ -21,6 +21,7 @@ import org.opengroup.osdu.azure.publisherFacade.models.PubSubAttributesBuilder;
 import org.opengroup.osdu.azure.publisherFacade.models.ServiceBusMessageBody;
 import org.opengroup.osdu.azure.servicebus.ITopicClientFactory;
 import org.opengroup.osdu.core.common.model.http.AppException;
+import org.opengroup.osdu.core.common.model.http.CollaborationContext;
 import org.opengroup.osdu.core.common.model.http.DpsHeaders;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -30,6 +31,7 @@ import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Implementation of Service Bus publisher.
@@ -44,28 +46,46 @@ public class ServiceBusPublisher {
     private PubsubConfiguration pubsubConfiguration;
 
     /**
-     * @param publisherInfo Contains Service bus batch and publishing details
-     * @param headers       DpsHeaders
+     * @param publisherInfo        Contains Service bus batch and publishing details
+     * @param headers              DpsHeaders
+     * @param collaborationContext CollaborationContext
      */
-    public void publishToServiceBus(final DpsHeaders headers, final PublisherInfo publisherInfo) {
+    public void publishToServiceBus(final DpsHeaders headers, final PublisherInfo publisherInfo, final Optional<CollaborationContext> collaborationContext) {
         Gson gson = new Gson();
         Message message = new Message();
         Integer retryCount = Integer.parseInt(pubsubConfiguration.getRetryLimit());
         // properties
         headers.addCorrelationIdIfMissing();
-        PubSubAttributesBuilder pubSubBuilder = PubSubAttributesBuilder.builder().dpsHeaders(headers).build();
+        PubSubAttributesBuilder pubSubBuilder;
+        if (collaborationContext.isPresent()) {
+            pubSubBuilder = PubSubAttributesBuilder.builder().dpsHeaders(headers).collaborationContext(collaborationContext.get()).build();
+        } else {
+            pubSubBuilder = PubSubAttributesBuilder.builder().dpsHeaders(headers).build();
+        }
         Map<String, Object> properties = pubSubBuilder.createAttributesMap();
 
         message.setProperties(properties);
         message.setMessageId(publisherInfo.getMessageId());
 
         // add all to body {"message": {"data":[], "id":...}}
-        MessageProperties messageProperties = MessageProperties.builder()
-                .data(gson.toJsonTree(publisherInfo.getBatch()))
-                .accountId(headers.getPartitionIdWithFallbackToAccountId())
-                .partitionId(headers.getPartitionIdWithFallbackToAccountId())
-                .correlationId(headers.getCorrelationId())
-                .build();
+        MessageProperties messageProperties;
+
+        if (collaborationContext.isPresent()) {
+            messageProperties = MessageProperties.builder()
+                    .data(gson.toJsonTree(publisherInfo.getBatch()))
+                    .accountId(headers.getPartitionIdWithFallbackToAccountId())
+                    .partitionId(headers.getPartitionIdWithFallbackToAccountId())
+                    .correlationId(headers.getCorrelationId())
+                    .collaborationDirectives("x-collaboration:" + "id= " + collaborationContext.get().getId() + ",application= " + collaborationContext.get().getApplication())
+                    .build();
+        } else {
+            messageProperties = MessageProperties.builder()
+                    .data(gson.toJsonTree(publisherInfo.getBatch()))
+                    .accountId(headers.getPartitionIdWithFallbackToAccountId())
+                    .partitionId(headers.getPartitionIdWithFallbackToAccountId())
+                    .correlationId(headers.getCorrelationId())
+                    .build();
+        }
         ServiceBusMessageBody serviceBusMessageBody = ServiceBusMessageBody.builder()
                 .message(messageProperties)
                 .build();
