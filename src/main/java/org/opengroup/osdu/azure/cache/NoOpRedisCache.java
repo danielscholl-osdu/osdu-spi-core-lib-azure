@@ -46,9 +46,9 @@ public final class NoOpRedisCache<K, V> implements IRedisCache<K, V> {
     }
 
     @Override
-    public long getTtl(final K k) {
+    public Long getTtl(final K k) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - getTtl");
-        return 0;
+        return 0L;
     }
 
     @Override
