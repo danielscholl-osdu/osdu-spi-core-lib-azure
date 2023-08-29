@@ -107,7 +107,7 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * Gets the ttl for a key in milliseconds.
      */
     @Override
-    public long getTtl(final K k) {
+    public Long getTtl(final K k) {
         IRedisCache<K, V> redisCache = redisClientFactory.getClient(keyClass, valueClass, redisConfiguration);
         return redisCache.getTtl(k);
     }
