@@ -2,6 +2,7 @@ package org.opengroup.osdu.azure.cosmosdb;
 
 import com.azure.cosmos.CosmosClient;
 import com.azure.cosmos.CosmosContainer;
+import com.azure.cosmos.CosmosException;
 import com.azure.cosmos.models.CosmosBulkExecutionOptions;
 import com.azure.cosmos.models.CosmosBulkItemResponse;
 import com.azure.cosmos.models.CosmosBulkOperations;
@@ -22,6 +23,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.SortedSet;
+import java.util.TreeSet;
+
 
 import static org.opengroup.osdu.azure.logging.DependencyType.COSMOS_STORE;
 
@@ -117,11 +121,8 @@ public class CosmosStoreBulkOperations {
                                       final int maxConcurrencyPerPartitionRange,
                                       final String operation) {
         final long start = System.currentTimeMillis();
-        final int[] statusCode = {HttpStatus.SC_OK};
-        final int[] clientStatusCode = {HttpStatus.SC_OK};
         final double[] requestCharge = {0.0};
-
-        List<String> exceptions = new ArrayList<>();
+        SortedSet<Integer> errorStatusCodes = new TreeSet<>();
 
         try {
             CosmosClient cosmosClient = cosmosClientFactory.getClient(dataPartitionId);
@@ -131,44 +132,63 @@ public class CosmosStoreBulkOperations {
             cosmosBulkExecutionOptions.setMaxMicroBatchConcurrency(maxConcurrencyPerPartitionRange);
 
             container.executeBulkOperations(cosmosItemOperations, cosmosBulkExecutionOptions).forEach(cosmosBulkOperationResponse -> {
-                CosmosBulkItemResponse cosmosBulkItemResponse = cosmosBulkOperationResponse.getResponse();
-                CosmosItemOperation cosmosItemOperation = cosmosBulkOperationResponse.getOperation();
-                requestCharge[0] += cosmosBulkItemResponse.getRequestCharge();
-
-                if (cosmosBulkItemResponse != null && cosmosBulkOperationResponse.getResponse() != null && cosmosBulkOperationResponse.getResponse().isSuccessStatusCode()) {
-                    LOGGER.info("Item : [{}], Status Code: {}, Request Charge: {}", cosmosItemOperation.getItem().toString(), cosmosBulkItemResponse.getStatusCode(), cosmosBulkItemResponse.getRequestCharge());
+                if (cosmosBulkOperationResponse == null) {
+                    errorStatusCodes.add(500);
+                    LOGGER.error("Invalid response : null");
                 } else {
-                    LOGGER.error(
-                            "The operation for Item : [{}] Failed. Response code : {}. , Request Charge: {}, Exception : {}",
-                            cosmosItemOperation.getId(),
-                            cosmosBulkItemResponse.getStatusCode(),
-                            cosmosBulkItemResponse.getRequestCharge(),
-                            cosmosBulkOperationResponse.getException());
-                    if (cosmosBulkOperationResponse.getException() != null) {
-                        exceptions.add(cosmosItemOperation.getId() + "| Error occurred for " + operation + " operation with status code " + cosmosBulkItemResponse.getStatusCode() + "| Exception is: " + cosmosBulkOperationResponse.getException().toString());
+                    LOGGER.info("Item response : {}", cosmosBulkOperationResponse);
+                    CosmosBulkItemResponse cosmosBulkItemResponse = cosmosBulkOperationResponse.getResponse();
+                    CosmosItemOperation cosmosItemOperation = cosmosBulkOperationResponse.getOperation();
+                    Exception exception = cosmosBulkOperationResponse.getException();
+
+                    if (cosmosBulkOperationResponse.getResponse() != null && cosmosBulkOperationResponse.getResponse().isSuccessStatusCode()) {
+                        LOGGER.info("ItemId : [{}], Status Code: {}, Request Charge: {}", cosmosItemOperation.getId(), cosmosBulkItemResponse.getStatusCode(), cosmosBulkItemResponse.getRequestCharge());
                     } else {
-                        exceptions.add(cosmosItemOperation.getId() + "| Internal error occurred for " + operation + " operation with status code " + cosmosBulkItemResponse.getStatusCode());
-                    }
-                    if (cosmosBulkItemResponse.getStatusCode() >= 500) {
-                        statusCode[0] = cosmosBulkItemResponse.getStatusCode();
-                    } else if (cosmosBulkItemResponse.getStatusCode() >= 400) {
-                        clientStatusCode[0] = cosmosBulkItemResponse.getStatusCode();
+                        Integer statusCode = 500;
+                        if (cosmosBulkItemResponse != null) {
+                            statusCode = cosmosBulkItemResponse.getStatusCode();
+                            requestCharge[0] += cosmosBulkItemResponse.getRequestCharge();
+                        }
+
+                        // log the failure response
+                        LOGGER.error(
+                                "The operation for Item : [{}] Failed. Response code : {}. , Request Charge: {}, Exception : {}",
+                                cosmosItemOperation.getId(),
+                                statusCode,
+                                requestCharge[0],
+                                exception != null ? exception.toString() : "exception is null");
+                        errorStatusCodes.add(statusCode);
+
+                        if (exception != null) {
+                            if ((exception instanceof CosmosException) && ((CosmosException) exception).getStatusCode() == HttpStatus.SC_TOO_MANY_REQUESTS) {
+                                throw new AppException(HttpStatus.SC_TOO_MANY_REQUESTS, "Too Many Requests", "CosmosDB request limit reached!", exception);
+                            }
+                        } else {
+                            if (statusCode == HttpStatus.SC_TOO_MANY_REQUESTS) {
+                                throw new AppException(HttpStatus.SC_TOO_MANY_REQUESTS, "Too Many Requests", "CosmosDB request limit reached!!");
+                            }
+                        }
                     }
                 }
             });
 
-            if (!exceptions.isEmpty()) {
-                int status = statusCode[0] != HttpStatus.SC_OK ? statusCode[0] : clientStatusCode[0];
-                LOGGER.error("Failed to " + operation + " documents in CosmosDB: {}", String.join(",", exceptions));
-                throw new AppException(status, "Record " + operation + " has failed!", "Failed to " + operation + " documents in CosmosDB", exceptions.toArray(new String[exceptions.size()]));
+            if (!errorStatusCodes.isEmpty()) {
+                int status = (errorStatusCodes.contains(HttpStatus.SC_TOO_MANY_REQUESTS) ? HttpStatus.SC_TOO_MANY_REQUESTS : errorStatusCodes.last());
+                LOGGER.error("Failed to " + operation + " documents in CosmosDB.");
+
+                if (status == HttpStatus.SC_TOO_MANY_REQUESTS) {
+                    throw new AppException(HttpStatus.SC_TOO_MANY_REQUESTS, "Too Many Requests", "CosmosDB request limit reached!!!");
+                } else {
+                    throw new AppException(status, "Bulk operation : " + operation + " has failed!", "Failed to " + operation + " documents in CosmosDB");
+                }
             }
         } catch (Exception e) {
-            int status = statusCode[0] != HttpStatus.SC_OK ? statusCode[0] : clientStatusCode[0];
+            LOGGER.error("Failed to bulk upsert items. Exception: ", e);
+            int status = (e instanceof AppException) ? ((AppException) e).getError().getCode() : 500;
             String errorMessage = "Unexpectedly failed to bulk " + operation + " documents";
-            LOGGER.error(errorMessage, e);
             throw new AppException(status, errorMessage, e.getMessage(), e);
         } finally {
-            int status = statusCode[0] != HttpStatus.SC_OK ? statusCode[0] : clientStatusCode[0];
+            int status = (errorStatusCodes.isEmpty() ? HttpStatus.SC_OK : (errorStatusCodes.contains(HttpStatus.SC_TOO_MANY_REQUESTS) ? HttpStatus.SC_TOO_MANY_REQUESTS : errorStatusCodes.last()));
             final long timeTaken = System.currentTimeMillis() - start;
             final String dependencyTarget = DependencyLogger.getCosmosDependencyTarget(cosmosDBName, collectionName);
             final String dependencyData = String.format("partition_key=%s", new HashSet<>(partitionKeys));
@@ -180,7 +200,7 @@ public class CosmosStoreBulkOperations {
                     .target(dependencyTarget)
                     .timeTakenInMs(timeTaken)
                     .requestCharge(requestCharge[0])
-                    .resultCode(statusCode[0])
+                    .resultCode(status)
                     .success(status == HttpStatus.SC_OK)
                     .build();
             dependencyLogger.logDependency(loggingOptions);
