@@ -138,6 +138,17 @@
         <artifactId>commons-lang3</artifactId>
         <version>3.18.0</version>
       </dependency>
+      <!--
+        lettuce-core Fix CVE-2024-47535
+        As of 2025-04-29, the latest spring-boot-dependencies 3.4.5 references lettuce-core 6.4.2.RELEASE.
+        https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-dependencies/3.4.5
+        Remove when spring-boot-dependencies references a version of lettuce-core >= 6.5.1.RELEASE.
+      -->
+      <dependency>
+          <groupId>io.lettuce</groupId>
+          <artifactId>lettuce-core</artifactId>
+          <version>6.5.5.RELEASE</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
