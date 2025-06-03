@@ -8,7 +8,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
-import com.azure.identity.DefaultAzureCredentialBuilder;
+import com.azure.identity.DefaultAzureCredential;
 import com.azure.security.keyvault.keys.cryptography.CryptographyClient;
 import com.azure.security.keyvault.keys.cryptography.CryptographyClientBuilder;
 
@@ -23,6 +23,8 @@ public class CryptographyClientFactoryImpl implements CryptographyClientFactory 
   private PartitionServiceClient partitionService;
   @Autowired
   private CryptographyClientCache clientCache;
+  @Autowired
+  private DefaultAzureCredential defaultAzureCredential;
 
   /**
    * @param partitionId partition id
@@ -41,7 +43,7 @@ public class CryptographyClientFactoryImpl implements CryptographyClientFactory 
 
     CryptographyClient cryptographyClient = new CryptographyClientBuilder()
         .keyIdentifier(pi.getCryptographyEncryptionKeyIdentifier())
-        .credential(new DefaultAzureCredentialBuilder().build())
+        .credential(defaultAzureCredential)
         .buildClient();
     clientCache.put(cacheKey, cryptographyClient);
     return cryptographyClient;
