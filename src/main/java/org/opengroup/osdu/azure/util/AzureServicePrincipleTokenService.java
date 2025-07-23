@@ -54,13 +54,26 @@ public class AzureServicePrincipleTokenService {
     @Autowired
     private AzureServicePrincipleTokenServiceCache tokenCache;
 
+    private static final String MANAGEMENT_SCOPE = "https://management.azure.com/.default";
+
+
     /**
      * @return service principle's authorization token
      */
     public String getAuthorizationToken() {
+        return getAuthorizationToken(MANAGEMENT_SCOPE);
+    }
+
+    /**
+     * Gets the authorization token for the specified scope.
+     * @param scope The scope for which the token is requested
+     * @return service principle's authorization token
+     */
+    public String getAuthorizationToken(final String scope) {
         String accessToken = "";
         try {
-            IdToken cachedToken = (IdToken) this.tokenCache.get("token");
+            String cacheKey = "token:" + scope;
+            IdToken cachedToken = (IdToken) this.tokenCache.get(cacheKey);
             if (!IdToken.refreshToken(cachedToken)) {
                 return cachedToken.getTokenValue();
             }
@@ -69,9 +82,9 @@ public class AzureServicePrincipleTokenService {
             // 2. Try Pod Identity second (legacy K8s method)
             // 3. Fallback to Service Principal with client secret
             if (workloadIdentityConfiguration.getIsEnabled()) {
-                accessToken = this.azureServicePrincipal.getWIToken(aadClientId);
+                accessToken = this.azureServicePrincipal.getWIToken(aadClientId, scope);
             } else if (podIdentityConfiguration.getIsEnabled()) {
-                accessToken = this.azureServicePrincipal.getMSIToken();
+                accessToken = this.azureServicePrincipal.getMSIToken(scope);
             } else {
                 try {
                     accessToken = this.azureServicePrincipal.getIdToken(clientID, clientSecret, tenantId, aadClientId);
@@ -93,7 +106,7 @@ public class AzureServicePrincipleTokenService {
                     .tokenValue(accessToken)
                     .expirationTimeMillis(JWT.decode(accessToken).getExpiresAt().getTime())
                     .build();
-            this.tokenCache.put("token", idToken);
+            this.tokenCache.put(cacheKey, idToken);
         } catch (JWTDecodeException e) {
             this.tokenCache.clearAll();
             throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, "Persistence error", "Invalid token, error decoding", e);
