@@ -5,12 +5,15 @@ import com.auth0.jwt.exceptions.JWTDecodeException;
 import com.azure.security.keyvault.secrets.SecretClient;
 import org.apache.http.HttpStatus;
 import org.opengroup.osdu.azure.di.AzureActiveDirectoryConfiguration;
+import org.opengroup.osdu.azure.di.LocalDevelopmentConfiguration;
 import org.opengroup.osdu.azure.di.PodIdentityConfiguration;
 import org.opengroup.osdu.azure.di.WorkloadIdentityConfiguration;
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.search.IdToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 import jakarta.inject.Inject;
@@ -48,6 +51,10 @@ public class AzureServicePrincipleTokenService {
     private AzureActiveDirectoryConfiguration aadConfiguration;
     @Autowired
     private SecretClient sc;
+    @Autowired
+    private Environment environment;
+    @Autowired(required = false)  // Optional - only exists when "local" profile is active
+    private LocalDevelopmentConfiguration localDevelopmentConfiguration;
 
     private final AzureServicePrincipal azureServicePrincipal = new AzureServicePrincipal();
 
@@ -64,14 +71,20 @@ public class AzureServicePrincipleTokenService {
                 return cachedToken.getTokenValue();
             }
 
-            // 1. Try Workload Identity first (modern K8s method)
-            // 2. Try Pod Identity second (legacy K8s method)
-            // 3. Fallback to Service Principal with client secret
-            if (workloadIdentityConfiguration.getIsEnabled()) {
+            // Check if running in local development mode
+            if (environment.acceptsProfiles(Profiles.of("local"))
+                && localDevelopmentConfiguration != null
+                && localDevelopmentConfiguration.getEnableLocalCredentials()) {
+                // Use local development credentials (Azure CLI, VS Code, IntelliJ)
+                accessToken = this.azureServicePrincipal.getLocalDevToken(aadClientId.concat("/.default"));
+            } else if (workloadIdentityConfiguration.getIsEnabled()) {
+                // Try Workload Identity (modern K8s method)
                 accessToken = this.azureServicePrincipal.getWIToken(aadClientId);
             } else if (podIdentityConfiguration.getIsEnabled()) {
+                // Try Pod Identity (legacy K8s method)
                 accessToken = this.azureServicePrincipal.getMSIToken();
             } else {
+                // Fallback to Service Principal with client secret
                 try {
                     accessToken = this.azureServicePrincipal.getIdToken(clientID, clientSecret, tenantId, aadClientId);
                 } catch (AppException e) {

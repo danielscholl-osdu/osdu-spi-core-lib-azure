@@ -16,8 +16,14 @@ package org.opengroup.osdu.azure.util;
 
 import com.azure.core.credential.AccessToken;
 import com.azure.core.credential.TokenRequestContext;
+import com.azure.identity.AzureCliCredential;
+import com.azure.identity.AzureCliCredentialBuilder;
+import com.azure.identity.ChainedTokenCredential;
+import com.azure.identity.ChainedTokenCredentialBuilder;
 import com.azure.identity.ClientSecretCredential;
 import com.azure.identity.ClientSecretCredentialBuilder;
+import com.azure.identity.IntelliJCredential;
+import com.azure.identity.IntelliJCredentialBuilder;
 import com.azure.identity.ManagedIdentityCredential;
 import com.azure.identity.ManagedIdentityCredentialBuilder;
 import com.azure.identity.WorkloadIdentityCredential;
@@ -139,6 +145,53 @@ public final class AzureServicePrincipal {
             throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
                 "Workload Identity token acquisition failed: " + e.getMessage());
         }
+    }
+
+    /**
+     * Gets an authentication token using local development credentials with custom scope.
+     *
+     * @param scope The scope to request
+     * @return The authentication token string
+     * @throws AppException if token acquisition fails or returns null
+     */
+    public String getLocalDevToken(final String scope) {
+        try {
+            ChainedTokenCredentialBuilder credentialBuilder = this.createLocalChainedTokenCredentialBuilder();
+
+            ChainedTokenCredential chainedCredential = credentialBuilder.build();
+
+            TokenRequestContext requestContext = new TokenRequestContext();
+            requestContext.addScopes(scope);
+
+            AccessToken token = chainedCredential.getToken(requestContext).block();
+
+            if (token != null && token.getToken() != null) {
+                return token.getToken();
+            }
+            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
+                "Local development credential returned null token");
+        } catch (Exception e) {
+            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
+                "Local development token acquisition failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Creates a ChainedTokenCredentialBuilder for local development.
+     * Protected method to allow mocking in tests.
+     *
+     * @return A ChainedTokenCredentialBuilder instance
+     */
+    protected ChainedTokenCredentialBuilder createLocalChainedTokenCredentialBuilder() {
+        ChainedTokenCredentialBuilder credentialBuilder = new ChainedTokenCredentialBuilder();
+
+        AzureCliCredential azureCliCredential = new AzureCliCredentialBuilder().build();
+        credentialBuilder.addLast(azureCliCredential);
+
+        IntelliJCredential intelliJCredential = new IntelliJCredentialBuilder().build();
+        credentialBuilder.addLast(intelliJCredential);
+
+        return credentialBuilder;
     }
 
 
