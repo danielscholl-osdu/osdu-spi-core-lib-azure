@@ -61,7 +61,7 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
     @Autowired
     private ICosmosClientBuilderFactory cosmosClientBuilderFactory;
 
-    @Value("${cosmos.maxConnectionsPerEndpoint}")
+    @Value("${cosmos.maxConnectionsPerEndpoint:130}")
     private Integer maxConnectionPerEndpoint;
 
     /**
