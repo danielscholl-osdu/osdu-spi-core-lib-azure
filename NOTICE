@@ -16,6 +16,7 @@ Apache-2.0
 ========================================================================
 The following software have components provided under the terms of this license:
 
+- ASM Core (from http://asm.ow2.io/, http://asm.ow2.org/)
 - ASM based accessors helper used by json-smart (from https://urielch.github.io/)
 - Adapter: RxJava (from https://github.com/square/retrofit)
 - Apache Commons Codec (from http://commons.apache.org/proper/commons-codec/, https://commons.apache.org/proper/commons-codec/)
@@ -318,6 +319,13 @@ The following software have components provided under the terms of this license:
 - msal4j (from https://github.com/AzureAD/microsoft-authentication-library-for-java)
 - msal4j-brokers (from https://github.com/AzureAD/microsoft-authentication-library-for-java)
 - msal4j-persistence-extension (from https://github.com/AzureAD/microsoft-authentication-extensions-for-java, https://github.com/AzureAD/microsoft-authentication-library-for-java)
+
+========================================================================
+SPL-1.0
+========================================================================
+The following software have components provided under the terms of this license:
+
+- Checker Qual (from https://checkerframework.org)
 
 ========================================================================
 cc-pd
