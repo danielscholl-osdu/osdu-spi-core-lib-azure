@@ -22,6 +22,7 @@ import com.azure.identity.WorkloadIdentityCredential;
 import com.azure.identity.WorkloadIdentityCredentialBuilder;
 
 import org.opengroup.osdu.core.common.model.http.AppException;
+import org.springframework.stereotype.Component;
 
 /**
  * Class to generate the AAD authentication tokens using WorkloadIdentityCredential.
@@ -31,6 +32,7 @@ import org.opengroup.osdu.core.common.model.http.AppException;
  * - Managed Identity/Pod Identity (legacy approach for AKS)
  * - Environment Variables (for non-AKS scenarios)
  */
+@Component
 public final class AzureServicePrincipal {
 
     private static final int ERROR_STATUS_CODE = 500;

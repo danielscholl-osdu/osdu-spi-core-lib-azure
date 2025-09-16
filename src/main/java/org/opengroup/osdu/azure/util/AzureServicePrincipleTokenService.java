@@ -7,6 +7,7 @@ import org.apache.http.HttpStatus;
 import org.opengroup.osdu.azure.di.AzureActiveDirectoryConfiguration;
 import org.opengroup.osdu.azure.di.PodIdentityConfiguration;
 import org.opengroup.osdu.azure.di.WorkloadIdentityConfiguration;
+import org.opengroup.osdu.azure.cache.AzureServicePrincipleTokenServiceCache;
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.search.IdToken;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,8 +16,6 @@ import org.springframework.stereotype.Component;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.opengroup.osdu.azure.util.AuthUtils.getClientSecret;
 
@@ -49,9 +48,11 @@ public class AzureServicePrincipleTokenService {
     @Autowired
     private SecretClient sc;
 
-    private final AzureServicePrincipal azureServicePrincipal = new AzureServicePrincipal();
+    @Autowired
+    private AzureServicePrincipal azureServicePrincipal;
 
-    private Map<String, Object> tokenCache = new HashMap<>();
+    @Autowired
+    private AzureServicePrincipleTokenServiceCache tokenCache;
 
     /**
      * @return service principle's authorization token
@@ -94,8 +95,10 @@ public class AzureServicePrincipleTokenService {
                     .build();
             this.tokenCache.put("token", idToken);
         } catch (JWTDecodeException e) {
+            this.tokenCache.clearAll();
             throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, "Persistence error", "Invalid token, error decoding", e);
         } catch (Exception e) {
+            this.tokenCache.clearAll();
             throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, "Persistence error", "Error generating token", e);
         }
 
