@@ -18,7 +18,9 @@ import com.microsoft.azure.servicebus.ClientSettings;
 import com.microsoft.azure.servicebus.management.ManagementClient;
 import com.microsoft.azure.servicebus.primitives.ConnectionStringBuilder;
 import com.microsoft.azure.servicebus.security.ManagedIdentityTokenProvider;
+import org.opengroup.osdu.azure.dependencies.DefaultAzureServiceBusCredential;
 import org.opengroup.osdu.azure.di.MSIConfiguration;
+import org.opengroup.osdu.azure.di.WorkloadIdentityConfiguration;
 import org.opengroup.osdu.azure.partition.PartitionInfoAzure;
 import org.opengroup.osdu.azure.partition.PartitionServiceClient;
 import org.opengroup.osdu.common.Validators;
@@ -51,6 +53,9 @@ public class ManagementClientFactoryImpl implements IManagementClientFactory {
     @Autowired
     private MSIConfiguration msiConfiguration;
 
+    @Autowired
+    private WorkloadIdentityConfiguration workloadIdentityConfiguration;
+
     /**
      * Initializes the private variables as required.
      */
@@ -76,7 +81,12 @@ public class ManagementClientFactoryImpl implements IManagementClientFactory {
 
     /**
      * @param partitionId Data Partition Id
-     * @return Management Client Instance
+     * @return Management Client Instance using appropriate token provider
+     * Auth selection order:
+     * 1. If MSI is enabled:
+     *    1. Try Workload Identity first (modern K8s method)
+     *    2. Fallback to Pod Identity (legacy K8s method)
+     * 2. Otherwise, use service bus connection string
      */
     private ManagementClient createManagementClient(final String partitionId) {
         try {
@@ -88,7 +98,10 @@ public class ManagementClientFactoryImpl implements IManagementClientFactory {
                 String serviceBusNamespace = pi.getSbNamespace();
                 URI namespaceEndpointURI = new URI(String.format("sb://%s.servicebus.windows.net/", serviceBusNamespace));
 
-                ClientSettings clientSettings = new ClientSettings(new ManagedIdentityTokenProvider());
+                ClientSettings clientSettings = workloadIdentityConfiguration.getIsEnabled()
+                        ? new ClientSettings(new DefaultAzureServiceBusCredential())
+                        : new ClientSettings(new ManagedIdentityTokenProvider());
+
                 managementClient = new ManagementClient(namespaceEndpointURI, clientSettings);
             } else {
                 String serviceBusConnectionString = pi.getSbConnection();
