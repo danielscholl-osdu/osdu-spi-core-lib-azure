@@ -13,26 +13,28 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.opengroup.osdu.azure.cosmosdb.cache.AbstractCosmosClientCache;
+import org.opengroup.osdu.azure.cosmosdb.cache.async.CosmosAsyncClientCache;
+import org.opengroup.osdu.azure.cosmosdb.cache.sync.CosmosClientCache;
 import org.opengroup.osdu.azure.cosmosdb.system.config.SystemCosmosConfig;
 import org.opengroup.osdu.azure.di.CosmosRetryConfiguration;
 import org.opengroup.osdu.azure.di.MSIConfiguration;
 import org.opengroup.osdu.azure.logging.CoreLoggerFactory;
 import org.opengroup.osdu.azure.partition.PartitionInfoAzure;
 import org.opengroup.osdu.azure.partition.PartitionServiceClient;
-import org.springframework.util.ReflectionUtils;
 
-import java.lang.reflect.Field;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.argThat;
-import static org.mockito.Mockito.only;
 import static org.mockito.MockitoAnnotations.initMocks;
+import static org.opengroup.osdu.common.TestUtils.setFieldValue;
 
 @ExtendWith(MockitoExtension.class)
 public class CosmosClientFactoryImplTest {
@@ -67,12 +69,17 @@ public class CosmosClientFactoryImplTest {
     private KeyVaultSecret cosmosDbAccountSecret;
     @Mock
     private KeyVaultSecret cosmosPrimaryKeySecret;
+    @Mock
+    private CosmosClientCache cosmosClientCache;
+    @Mock
+    private CosmosAsyncClientCache cosmosAsyncClientCache;
     @InjectMocks
     private CosmosClientFactoryImpl sut;
 
-    private static final String FIELD_NAME_COSMOS_CLIENT_MAP = "cosmosClientMap";
-    private static final String FIELD_NAME_COSMOS_ASYNC_CLIENT_MAP = "cosmosAsyncClientMap";
 
+    private static final String SYSTEM_COSMOS_CACHE_KEY = "system_cosmos";
+    private static final String CACHE_KEY_POSTFIX_COSMOS_CLIENT = "cosmosClient";
+    private static final String CACHE_KEY_POSTFIX_COSMOS_ASYNC_CLIENT = "cosmosAsyncClient";
     private static final String FIELD_NAME_MAX_CONNECTION_PER_ENDPOINT = "maxConnectionPerEndpoint";
     private static final Integer MAX_CONNECTION_PER_ENDPOINT = 10;
     private static final String PARTITION_ID = "dataPartitionId";
@@ -88,12 +95,12 @@ public class CosmosClientFactoryImplTest {
     void init() {
         CoreLoggerFactory.resetFactory();
         initMocks(this);
-        sut.initialize();
-        setFieldValue(FIELD_NAME_MAX_CONNECTION_PER_ENDPOINT, MAX_CONNECTION_PER_ENDPOINT);
+        setFieldValue(sut, FIELD_NAME_MAX_CONNECTION_PER_ENDPOINT, MAX_CONNECTION_PER_ENDPOINT);
     }
 
     @Test
     public void getClient_shouldReturnCosmosClient_whenMsiConfigurationDisabled() {
+        mockComputeIfAbsentOnCache(cosmosClientCache, PARTITION_ID, true);
         when(partitionInfo.getCosmosEndpoint()).thenReturn(COSMOS_ENDPOINT_URL);
         when(partitionInfo.getCosmosPrimaryKey()).thenReturn(COSMOS_PRIMARY_KEY);
         when(partitionService.getPartition(PARTITION_ID)).thenReturn(partitionInfo);
@@ -115,6 +122,7 @@ public class CosmosClientFactoryImplTest {
 
     @Test
     public void getClient_shouldReturnCosmosClient_whenMsiConfigurationEnabled() {
+        mockComputeIfAbsentOnCache(cosmosClientCache, PARTITION_ID, true);
         when(partitionInfo.getCosmosEndpoint()).thenReturn(COSMOS_ENDPOINT_URL);
         when(partitionService.getPartition(PARTITION_ID)).thenReturn(partitionInfo);
 
@@ -135,7 +143,8 @@ public class CosmosClientFactoryImplTest {
 
     @Test
     public void getClient_shouldReturnCosmosClient_whenMaxConnectionsPerEndpointIsNull() {
-        setFieldValue("maxConnectionPerEndpoint", null);
+        mockComputeIfAbsentOnCache(cosmosClientCache, PARTITION_ID, true);
+        setFieldValue(sut, "maxConnectionPerEndpoint", null);
         when(partitionInfo.getCosmosEndpoint()).thenReturn(COSMOS_ENDPOINT_URL);
         when(partitionInfo.getCosmosPrimaryKey()).thenReturn(COSMOS_PRIMARY_KEY);
         when(partitionService.getPartition(PARTITION_ID)).thenReturn(partitionInfo);
@@ -154,6 +163,7 @@ public class CosmosClientFactoryImplTest {
 
     @Test
     public void getClient_shouldReturnAsyncCosmosClient_whenMsiConfigurationDisabled() {
+        mockComputeIfAbsentOnCache(cosmosAsyncClientCache, PARTITION_ID, true);
         when(partitionInfo.getCosmosEndpoint()).thenReturn(COSMOS_ENDPOINT_URL);
         when(partitionInfo.getCosmosPrimaryKey()).thenReturn(COSMOS_PRIMARY_KEY);
         when(partitionService.getPartition(PARTITION_ID)).thenReturn(partitionInfo);
@@ -175,6 +185,7 @@ public class CosmosClientFactoryImplTest {
 
     @Test
     public void getClient_shouldReturnCosmosAsyncClient_whenMsiConfigurationEnabled() {
+        mockComputeIfAbsentOnCache(cosmosAsyncClientCache, PARTITION_ID, true);
         when(partitionInfo.getCosmosEndpoint()).thenReturn(COSMOS_ENDPOINT_URL);
         when(partitionService.getPartition(PARTITION_ID)).thenReturn(partitionInfo);
 
@@ -195,6 +206,7 @@ public class CosmosClientFactoryImplTest {
 
     @Test
     public void getClient_shouldReturnSystemCosmosClient_whenMsiConfigurationDisabled() {
+        mockComputeIfAbsentOnCache(cosmosClientCache, SYSTEM_COSMOS_CACHE_KEY, false);
         when(systemCosmosConfig.getCosmosDBAccountKeyName()).thenReturn(COSMOS_DB_ACCOUNT_KEY);
         when(systemCosmosConfig.getCosmosPrimaryKeyName()).thenReturn(COSMOS_PRIMARY_KEY);
 
@@ -218,6 +230,7 @@ public class CosmosClientFactoryImplTest {
 
     @Test
     public void getClient_shouldReturnSystemCosmosClient_whenMsiConfigurationEnabled() {
+        mockComputeIfAbsentOnCache(cosmosClientCache, SYSTEM_COSMOS_CACHE_KEY, false);
         when(systemCosmosConfig.getCosmosDBAccountKeyName()).thenReturn(COSMOS_DB_ACCOUNT_KEY);
 
         when(secretClient.getSecret(COSMOS_DB_ACCOUNT_KEY)).thenReturn(cosmosDbAccountSecret);
@@ -258,28 +271,25 @@ public class CosmosClientFactoryImplTest {
         }
     }
 
-    @Test
-    public void shouldCloseAllClients() {
-        var syncCache = new HashMap<String, CosmosClient>() {{
-            put(PARTITION_ID, cosmosClient);
-            put(PARTITION_ID_ANOTHER, null);
-        }};
-        var asyncCache = new HashMap<String, CosmosAsyncClient>() {{
-            put(PARTITION_ID, cosmosAsyncClient);
-            put(PARTITION_ID_ANOTHER, null);
-        }};
-        setFieldValue(FIELD_NAME_COSMOS_CLIENT_MAP, syncCache);
-        setFieldValue(FIELD_NAME_COSMOS_ASYNC_CLIENT_MAP, asyncCache);
 
-        sut.closeAllClients();
-
-        verify(cosmosClient, only()).close();
-        verify(cosmosAsyncClient, only()).close();
+    private void mockComputeIfAbsentOnCache(AbstractCosmosClientCache cacheMock, String key, boolean keyWithPostfix) {
+        String cacheKey;
+        if(keyWithPostfix) {
+            cacheKey = String.format("%s-" + getCacheKeyPostfix(cacheMock), key);
+        } else {
+            cacheKey = key;
+        }
+        when(cacheMock.computeIfAbsent(
+                eq(cacheKey),
+                any(Function.class))
+        ).thenAnswer(invocation -> {
+            Function<String, CosmosClient> mappingFn = invocation.getArgument(1);
+            return mappingFn.apply(cacheKey);
+        });
     }
 
-    private void setFieldValue(String fieldName, Object fieldValue) {
-        Field field = ReflectionUtils.findField(CosmosClientFactoryImpl.class, fieldName);
-        field.setAccessible(true);
-        ReflectionUtils.setField(field, sut, fieldValue);
+    private String getCacheKeyPostfix(AbstractCosmosClientCache cacheMock) {
+        return cacheMock instanceof CosmosClientCache ? CACHE_KEY_POSTFIX_COSMOS_CLIENT
+                : CACHE_KEY_POSTFIX_COSMOS_ASYNC_CLIENT;
     }
 }

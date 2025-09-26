@@ -5,15 +5,13 @@ import com.azure.cosmos.CosmosClient;
 import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.DirectConnectionConfig;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import jakarta.annotation.PostConstruct;
 
 import com.azure.cosmos.ThrottlingRetryOptions;
 import com.azure.identity.DefaultAzureCredential;
 import com.azure.security.keyvault.secrets.SecretClient;
-import jakarta.annotation.PreDestroy;
 import org.opengroup.osdu.azure.KeyVaultFacade;
+import org.opengroup.osdu.azure.cosmosdb.cache.async.CosmosAsyncClientCache;
+import org.opengroup.osdu.azure.cosmosdb.cache.sync.CosmosClientCache;
 import org.opengroup.osdu.azure.cosmosdb.system.config.SystemCosmosConfig;
 import org.opengroup.osdu.azure.di.MSIConfiguration;
 import org.opengroup.osdu.azure.logging.CoreLoggerFactory;
@@ -46,8 +44,10 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
     @Autowired
     private SystemCosmosConfig systemCosmosConfig;
 
-    private Map<String, CosmosClient> cosmosClientMap;
-    private Map<String, CosmosAsyncClient> cosmosAsyncClientMap;
+    @Autowired
+    private CosmosClientCache cosmosClientCache;
+    @Autowired
+    private CosmosAsyncClientCache cosmosAsyncClientCache;
 
     @Autowired
     private CosmosRetryConfiguration cosmosRetryConfiguration;
@@ -65,15 +65,6 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
     private Integer maxConnectionPerEndpoint;
 
     /**
-     * Initializes the private variables as required.
-     */
-    @PostConstruct
-    public void initialize() {
-        cosmosClientMap = new ConcurrentHashMap<>();
-        cosmosAsyncClientMap = new ConcurrentHashMap<>();
-    }
-
-    /**
      * @param dataPartitionId Data Partition Id
      * @return Cosmos Client instance
      */
@@ -82,7 +73,7 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
         Validators.checkNotNullAndNotEmpty(dataPartitionId, DATA_PARTITION_ID);
         String cacheKey = String.format("%s-cosmosClient", dataPartitionId);
 
-        return this.cosmosClientMap.computeIfAbsent(cacheKey, cosmosClient -> createCosmosClient(dataPartitionId));
+        return this.cosmosClientCache.computeIfAbsent(cacheKey, cosmosClient -> createCosmosClient(dataPartitionId));
     }
 
     /**
@@ -94,7 +85,7 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
         Validators.checkNotNullAndNotEmpty(dataPartitionId, DATA_PARTITION_ID);
         String cacheKey = String.format("%s-cosmosAsyncClient", dataPartitionId);
 
-        return this.cosmosAsyncClientMap.computeIfAbsent(cacheKey, cosmosClient -> createCosmosAsyncClient(dataPartitionId));
+        return this.cosmosAsyncClientCache.computeIfAbsent(cacheKey, cosmosClient -> createCosmosAsyncClient(dataPartitionId));
     }
 
     /**
@@ -103,7 +94,7 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
     @Override
     public CosmosClient getSystemClient() {
 
-        return this.cosmosClientMap.computeIfAbsent(
+        return this.cosmosClientCache.computeIfAbsent(
                 SYSTEM_COSMOS_CACHE_KEY, cosmosClient -> createSystemCosmosClient()
         );
     }
@@ -212,37 +203,6 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
         DirectConnectionConfig connectionConfig = getDirectConnectionConfig();
         if (connectionConfig != null) {
             builder.directMode(connectionConfig);
-        }
-    }
-
-    /**
-     * This method close all cosmos clients before the bean destruction.
-     */
-    @PreDestroy
-    public void closeAllClients() {
-        if (cosmosClientMap != null) {
-            for (Map.Entry<String, CosmosClient> entry: cosmosClientMap.entrySet()) {
-                if (entry.getValue() != null) {
-                    try {
-                        entry.getValue().close();
-                    } catch (Exception e) {
-                        CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME)
-                                .warn("Failed to close CosmosClient for partition: " + entry.getKey(), e);
-                    }
-                }
-            }
-        }
-        if (cosmosAsyncClientMap != null) {
-            for (Map.Entry<String, CosmosAsyncClient> entry: cosmosAsyncClientMap.entrySet()) {
-                if (entry.getValue() != null) {
-                    try {
-                        entry.getValue().close();
-                    } catch (Exception e) {
-                        CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME)
-                                .warn("Failed to close CosmosAsyncClient for partition: " + entry.getKey(), e);
-                    }
-                }
-            }
         }
     }
 }
