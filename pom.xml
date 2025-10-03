@@ -44,7 +44,7 @@
 
     <osdu.oscorecommon.version>3.6.0</osdu.oscorecommon.version>
 
-    <!-- Spring Boot Framework 6.2.0 compatable with Spring Boot 3.4.0 -->
+    <!-- Spring Boot Framework 6.2.9 compatible with Spring Boot 3.5.3 -->
     <!-- https://spring.io/blog/2024/11/14/spring-framework-6-2-0-available-now -->
     <spring-framework.version>6.2.9</spring-framework.version>
     <spring-boot-dependencies.version>3.5.3</spring-boot-dependencies.version>
@@ -106,6 +106,19 @@
           <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
           <version>${springdoc-openapi-starter-webmvc-ui.version}</version>
       </dependency>
+      <!--
+        Netty BOM Fix CVE-2025-58056, CVE-2025-58057, CVE-2025-55163
+        Override Spring Boot 3.5.3's Netty version (4.1.122.Final) to fix multiple codec vulnerabilities.
+        This needs to be imported BEFORE Spring Boot dependencies to take precedence.
+        This can be removed when Spring Boot updates to Netty 4.1.125.Final or later.
+      -->
+      <dependency>
+          <groupId>io.netty</groupId>
+          <artifactId>netty-bom</artifactId>
+          <version>4.1.125.Final</version>
+          <type>pom</type>
+          <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
@@ -139,15 +152,44 @@
         <version>3.18.0</version>
       </dependency>
       <!--
+        commons-lang3 Fix CVE-2025-48924
+        Override Spring Boot 3.5.3's commons-lang3 version to fix uncontrolled recursion vulnerability.
+        This can be removed when Spring Boot updates to commons-lang3 3.18.0 or later.
+      -->
+      <dependency>
+          <groupId>org.apache.commons</groupId>
+          <artifactId>commons-lang3</artifactId>
+          <version>3.18.0</version>
+      </dependency>
+      <!--
         lettuce-core Fix CVE-2024-47535
-        As of 2025-04-29, the latest spring-boot-dependencies 3.4.5 references lettuce-core 6.4.2.RELEASE.
-        https://mvnrepository.com/artifact/org.springframework.boot/spring-boot-dependencies/3.4.5
+        Spring Boot 3.4.10 still references lettuce-core 6.4.2.RELEASE.
         Remove when spring-boot-dependencies references a version of lettuce-core >= 6.5.1.RELEASE.
       -->
       <dependency>
           <groupId>io.lettuce</groupId>
           <artifactId>lettuce-core</artifactId>
           <version>6.5.5.RELEASE</version>
+      </dependency>
+      <!--
+        nimbus-jose-jwt Fix CVE-2025-53864
+        Security vulnerability fix for deeply nested JSON object DOS attack.
+        Remove explicit version when upstream dependencies include 9.37.4 or later.
+      -->
+      <dependency>
+          <groupId>com.nimbusds</groupId>
+          <artifactId>nimbus-jose-jwt</artifactId>
+          <version>9.37.4</version>
+      </dependency>
+      <!--
+        reactor-netty-http Fix CVE-2025-22227
+        Security vulnerability fix for credential leaks in chained redirects.
+        Remove explicit version when spring-boot-dependencies includes 1.2.8 or later.
+      -->
+      <dependency>
+          <groupId>io.projectreactor.netty</groupId>
+          <artifactId>reactor-netty-http</artifactId>
+          <version>1.2.8</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
