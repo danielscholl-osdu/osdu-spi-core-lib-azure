@@ -178,4 +178,13 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
 
         return redissonClient.getLock(lockKey);
     }
+
+    /**
+     * Authenticate against the redis cache with the given username and password. Returns true if authentication was successful, false otherwise.
+     */
+    @Override
+    public boolean authenticate(final String username, final String password) {
+        IRedisCache<K, V> redisCache = redisClientFactory.getClient(keyClass, valueClass, redisConfiguration);
+        return redisCache.authenticate(username, password);
+    }
 }

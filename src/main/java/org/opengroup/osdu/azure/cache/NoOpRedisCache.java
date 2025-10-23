@@ -86,4 +86,10 @@ public final class NoOpRedisCache<K, V> implements IRedisCache<K, V> {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - getCodec");
         return null;
     }
+
+    @Override
+    public boolean authenticate(final String username, final String password) {
+        CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - authenticate");
+        return true;
+    }
 }
