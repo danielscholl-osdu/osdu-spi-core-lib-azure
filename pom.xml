@@ -46,9 +46,9 @@
 
     <!-- Spring Boot Framework 6.2.12 compatible with Spring Boot 3.5.6 -->
     <!-- https://spring.io/blog/2024/11/14/spring-framework-6-2-0-available-now -->
-    <!-- https://docs.spring.io/spring-boot/3.5.6/system-requirements.html -->
+    <!-- https://docs.spring.io/spring-boot/3.5.7/system-requirements.html -->
     <spring-framework.version>6.2.12</spring-framework.version>
-    <spring-boot-dependencies.version>3.5.6</spring-boot-dependencies.version>
+    <spring-boot-dependencies.version>3.5.7</spring-boot-dependencies.version>
 
     <azure-sdk-bom.version>1.2.36</azure-sdk-bom.version>
     <azure-spring-boot.version>5.22.0</azure-spring-boot.version>
