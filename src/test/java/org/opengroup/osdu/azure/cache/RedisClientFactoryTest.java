@@ -262,6 +262,44 @@ public class RedisClientFactoryTest {
         assertSame(mockRedisCache, result);
     }
 
+    @Test
+    public void should_not_refresh_client_when_msi_enabled_but_no_object_id() {
+        // Setup MSI enabled but no object ID (fallback scenario)
+        when(msiConfiguration.getIsEnabled()).thenReturn(true);
+        when(redisConfiguration.getObjectId()).thenReturn(null); // No object ID provided
+        
+        // Mock existing client in cache
+        final String cacheKey = String.format("%s-%s", String.class, List.class);
+        when(redisClientMap.containsKey(cacheKey)).thenReturn(true);
+        when(redisClientMap.get(cacheKey)).thenReturn(mockRedisCache);
+
+        IRedisCache<String, List<String>> result = redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration);
+        
+        // Verify no MSI authentication attempts were made (should fallback to password auth)
+        verify(defaultAzureCredential, never()).getToken(any(TokenRequestContext.class));
+        verify(mockRedisCache, never()).authenticate(anyString(), anyString());
+        assertSame(mockRedisCache, result);
+    }
+
+    @Test
+    public void should_not_refresh_client_when_msi_enabled_but_empty_object_id() {
+        // Setup MSI enabled but empty object ID (fallback scenario)
+        when(msiConfiguration.getIsEnabled()).thenReturn(true);
+        when(redisConfiguration.getObjectId()).thenReturn(""); // Empty object ID
+        
+        // Mock existing client in cache
+        final String cacheKey = String.format("%s-%s", String.class, List.class);
+        when(redisClientMap.containsKey(cacheKey)).thenReturn(true);
+        when(redisClientMap.get(cacheKey)).thenReturn(mockRedisCache);
+
+        IRedisCache<String, List<String>> result = redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration);
+        
+        // Verify no MSI authentication attempts were made (should fallback to password auth)
+        verify(defaultAzureCredential, never()).getToken(any(TokenRequestContext.class));
+        verify(mockRedisCache, never()).authenticate(anyString(), anyString());
+        assertSame(mockRedisCache, result);
+    }
+
     /**
      * Helper method to set private fields for testing.
      */

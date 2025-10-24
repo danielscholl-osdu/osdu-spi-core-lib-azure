@@ -73,14 +73,14 @@ public class RedisClientFactory<K, V> implements IRedisClientFactory<K, V> {
      * This enables automatic token refresh without manual client recreation.
      */
     private class RedissonMsiCredentialsResolver implements CredentialsResolver {
-        private final RedisAzureConfiguration config;
+        private final String objectId;
 
         /**
          * Constructor for RedissonMsiCredentialsResolver.
-         * @param redisConfiguration the Redis configuration containing MSI settings
+         * @param objectIdParam the object ID for MSI authentication
          */
-        RedissonMsiCredentialsResolver(final RedisAzureConfiguration redisConfiguration) {
-            this.config = redisConfiguration;
+        RedissonMsiCredentialsResolver(final String objectIdParam) {
+            this.objectId = objectIdParam;
         }
 
         @Override
@@ -88,22 +88,16 @@ public class RedisClientFactory<K, V> implements IRedisClientFactory<K, V> {
             final ICoreLogger logger = CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME);
 
             try {
-                final String objectId = config.getObjectId();
                 final String token = getTokenFromMsi(objectId);
                 if (token != null) {
-                    String username = objectId; // Object ID as username (already validated)
-                    String password = token; // Fresh access token as password
-                    logger.info(
-                        "RedissonMsiCredentialsResolver providing fresh credentials for address: {}", address);
-                    return CompletableFuture.completedFuture(new Credentials(username, password));
+                    logger.info("RedissonMsiCredentialsResolver providing fresh credentials for address: {}", address);
+                    return CompletableFuture.completedFuture(new Credentials(objectId, token));
                 } else {
-                    logger.error(
-                        "RedissonMsiCredentialsResolver failed to obtain MSI credentials for address: {}", address);
+                    logger.error("RedissonMsiCredentialsResolver failed to obtain MSI credentials for address: {}", address);
                     return CompletableFuture.failedFuture(new RuntimeException("Failed to obtain MSI credentials"));
                 }
             } catch (Exception e) {
-                logger.error(
-                    "RedissonMsiCredentialsResolver error resolving credentials for address: {}", address, e);
+                logger.error("RedissonMsiCredentialsResolver error resolving credentials for address: {}", address, e);
                 return CompletableFuture.failedFuture(e);
             }
         }
@@ -122,17 +116,16 @@ public class RedisClientFactory<K, V> implements IRedisClientFactory<K, V> {
         String cacheKey = String.format("%s-%s", keyClass.toString(), valueClass.toString());
 
         // Check if we need to re-authenticate due to MSI token expiration
-        if (msiConfiguration.getIsEnabled() && needsRefresh(cacheKey)) {
+        final String objectId = redisConfiguration.getObjectId();
+        final boolean useMsiAuth = canUseMsiAuthentication(objectId);
+
+        if (useMsiAuth && needsRefresh(cacheKey)) {
             IRedisCache<K, V> existingClient = this.redisClientMap.get(cacheKey);
             if (existingClient != null) {
                 logger.info("Redis client last authentication done more than {} minutes ago, re-authenticating with fresh MSI token.", TOKEN_EXPIRY_THRESHOLD.toMinutes());
-                final String objectId = redisConfiguration.getObjectId();
                 final String token = getTokenFromMsi(objectId);
                 if (token != null) {
-                    String username = objectId; // Use object ID as username (already validated)
-                    String password = token; // Use fresh access token as password
-
-                    boolean authSuccess = existingClient.authenticate(username, password);
+                    boolean authSuccess = existingClient.authenticate(objectId, token);
                     if (authSuccess) {
                         // Update the authentication time to reflect successful re-authentication
                         redisClientAuthenticationTimes.put(cacheKey, Instant.now());
@@ -161,7 +154,7 @@ public class RedisClientFactory<K, V> implements IRedisClientFactory<K, V> {
 
         IRedisCache<K, V> redisCache = this.redisClientMap.computeIfAbsent(cacheKey, key -> {
             IRedisCache<K, V> client = createRedisClient(keyClass, valueClass, redisConfiguration);
-            if (client != null && msiConfiguration.getIsEnabled()) {
+            if (client != null && useMsiAuth) {
                 redisClientAuthenticationTimes.put(key, Instant.now());
             }
             return client;
@@ -216,17 +209,24 @@ public class RedisClientFactory<K, V> implements IRedisClientFactory<K, V> {
         String username = null;
         String password = null;
 
-        if (msiConfiguration.getIsEnabled()) {
-            final String objectId = redisConfiguration.getObjectId();
+        final String objectId = redisConfiguration.getObjectId();
+        if (canUseMsiAuthentication(objectId)) {
             final String token = getTokenFromMsi(objectId);
-            if (token == null) {
-                logger.warn("Unable to get MSI token. Redis is not available yet.");
-                return null;
+            if (token != null) {
+                username = objectId; // Use object ID as username
+                password = token; // Use access token as password
+                logger.info("Using MSI authentication for Redis client");
+            } else {
+                logger.warn("Unable to get MSI token, falling back to password authentication.");
             }
-
-            username = objectId; // Use object ID as username (already validated)
-            password = token; // Use access token as password
         } else {
+            if (msiConfiguration.getIsEnabled()) {
+                logger.info("MSI is enabled but no valid object ID provided, falling back to password authentication.");
+            }
+        }
+
+        // Only fetch password from Key Vault if we're using password authentication (username is null)
+        if (username == null) {
             password = getSecret(redisConfiguration.getPasswordKey());
             if (password == null) {
                 logger.warn("Redis password does not exist. Redis is not available yet.");
@@ -269,12 +269,16 @@ public class RedisClientFactory<K, V> implements IRedisClientFactory<K, V> {
             .setKeepAlive(true)
             .setClientName(applicationName);
 
-        if (msiConfiguration.getIsEnabled()) {
+        final String objectId = redisAzureConfiguration.getObjectId();
+        if (canUseMsiAuthentication(objectId)) {
             // Use CredentialsResolver for dynamic MSI token refresh - this is the proper way in Redisson 3.52+
-            serverConfig.setCredentialsResolver(new RedissonMsiCredentialsResolver(redisAzureConfiguration));
+            serverConfig.setCredentialsResolver(new RedissonMsiCredentialsResolver(objectId));
             logger.info("Configured Redisson client with RedissonMsiCredentialsResolver for dynamic token refresh");
         } else {
-            // Static password authentication for non-MSI scenarios
+            if (msiConfiguration.getIsEnabled()) {
+                logger.info("MSI is enabled but no valid object ID provided, using password authentication for Redisson client.");
+            }
+            // Static password authentication for non-MSI scenarios or MSI without valid object ID
             String password = getSecret(redisAzureConfiguration.getPasswordKey());
             if (password == null) {
                 logger.warn("Redis password does not exist. Redisson client is not available yet.");
@@ -287,6 +291,15 @@ public class RedisClientFactory<K, V> implements IRedisClientFactory<K, V> {
     }
 
     /**
+     * Check if MSI authentication can be used.
+     * @param objectId the object ID from configuration
+     * @return true if MSI is enabled and object ID is valid
+     */
+    private boolean canUseMsiAuthentication(final String objectId) {
+        return msiConfiguration.getIsEnabled() && objectId != null && !objectId.isBlank();
+    }
+
+    /**
      * Get MSI authentication token for Redis.
      * Validates the object ID is configured and returns a fresh access token.
      * @param objectId the object ID for MSI authentication
@@ -296,7 +309,8 @@ public class RedisClientFactory<K, V> implements IRedisClientFactory<K, V> {
         final ICoreLogger logger = CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME);
         try {
             if (objectId == null || objectId.isBlank()) {
-                throw new IllegalArgumentException("Redis object ID is not configured. MSI authentication requires a valid object ID.");
+                logger.info("Redis object ID is not configured, can't get token.");
+                return null;
             }
 
             TokenRequestContext tokenRequestContext = new TokenRequestContext();
