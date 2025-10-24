@@ -27,6 +27,7 @@ import com.azure.cosmos.models.PartitionKey;
 import com.azure.cosmos.models.SqlQuerySpec;
 import com.azure.cosmos.models.FeedResponse;
 import com.azure.cosmos.util.CosmosPagedIterable;
+import org.apache.http.HttpStatus;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -65,6 +66,10 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.opengroup.osdu.azure.cosmosdb.CosmosStoreBulkOperations.TOO_MANY_REQUEST_ERROR_MESSAGE;
+import static org.opengroup.osdu.azure.cosmosdb.CosmosStoreBulkOperations.TOO_MANY_REQUEST_ERROR_REASON;
+import static org.opengroup.osdu.azure.cosmosdb.CosmosStore.REQUEST_TIMEOUT_ERROR_MESSAGE;
+import static org.opengroup.osdu.azure.cosmosdb.CosmosStore.REQUEST_TIMEOUT_ERROR_REASON;
 import static org.opengroup.osdu.azure.logging.DependencyType.COSMOS_STORE;
 
 @ExtendWith(MockitoExtension.class)
@@ -428,6 +433,52 @@ class CosmosStoreTest {
         verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
         DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
         verifyDependencyLogging(actualLoggingOptions, "CREATE_ITEM", "partition_key=some-data", "cosmosdb/collection", 200, true);
+    }
+
+     @Test
+    void createItem_throws408_ifRequestTimeoutException() throws CosmosException {
+        // Arrange
+        CosmosException timeoutException = mock(CosmosException.class);
+        when(timeoutException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TIMEOUT);
+        doThrow(timeoutException).when(container).createItem(any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.createItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, PARTITION_KEY_SOME_DATA, "test-data");
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TIMEOUT, exception.getError().getCode());
+        assertEquals(REQUEST_TIMEOUT_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TIMEOUT_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "CREATE_ITEM", "partition_key=some-data", "cosmosdb/collection", 408, false);
+    }
+
+    @Test
+    void createItem_throws429_ifThrottledException() throws CosmosException {
+        // Arrange
+        CosmosException throttleException = mock(CosmosException.class);
+        when(throttleException.getStatusCode()).thenReturn(HttpStatus.SC_TOO_MANY_REQUESTS);
+        doThrow(throttleException).when(container).createItem(any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.createItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, PARTITION_KEY_SOME_DATA, "test-data");
+        });
+
+        assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, exception.getError().getCode());
+        assertEquals(TOO_MANY_REQUEST_ERROR_REASON, exception.getError().getReason());
+        assertEquals(TOO_MANY_REQUEST_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "CREATE_ITEM", "partition_key=some-data", "cosmosdb/collection", 429, false);
     }
 
     @Test

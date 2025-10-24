@@ -93,6 +93,8 @@ public class CosmosStore {
 
     private static final String LOGGER_NAME = CosmosStore.class.getName();
     private static final int PREFERRED_PAGE_SIZE = 1000;
+    protected static final String REQUEST_TIMEOUT_ERROR_REASON = "Request Timeout";
+    protected static final String REQUEST_TIMEOUT_ERROR_MESSAGE = "Request timeout while using CosmosDB. Consider increasing timeout settings or checking network connectivity.";
 
     @Autowired
     private ICosmosClientFactory cosmosClientFactory;
@@ -814,6 +816,18 @@ public class CosmosStore {
             throw new AppException(409, errorMessage, e.getMessage(), e);
         } catch (CosmosException e) {
             statusCode = e.getStatusCode();
+
+            // Handle request timeouts
+            if (statusCode == HttpStatus.SC_REQUEST_TIMEOUT) {
+                CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(REQUEST_TIMEOUT_ERROR_MESSAGE, e);
+                throw new AppException(HttpStatus.SC_REQUEST_TIMEOUT, REQUEST_TIMEOUT_ERROR_REASON, REQUEST_TIMEOUT_ERROR_MESSAGE, e);
+            }
+
+            // Handle throttling
+            if (statusCode == HttpStatus.SC_TOO_MANY_REQUESTS) {
+                throw new AppException(HttpStatus.SC_TOO_MANY_REQUESTS, TOO_MANY_REQUEST_ERROR_REASON, TOO_MANY_REQUEST_ERROR_MESSAGE, e);
+            }
+
             String errorMessage = "Unexpectedly failed to insert item into CosmosDB";
             CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(errorMessage, e);
             throw new AppException(500, errorMessage, e.getMessage(), e);
