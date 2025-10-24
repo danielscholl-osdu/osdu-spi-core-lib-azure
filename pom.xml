@@ -67,7 +67,7 @@
     <json.version>20250517</json.version>
     <log4j-slf4j-impl.version>2.25.1</log4j-slf4j-impl.version>
     <resilience4j.version>2.3.0</resilience4j.version>
-    <redisson.version>3.50.0</redisson.version>
+    <redisson.version>3.52.0</redisson.version>
     <guava.version>33.4.8-jre</guava.version>
 
     <!-- Plugin Versions -->

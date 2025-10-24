@@ -19,7 +19,6 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
 
     // Add Exception handling
     // Add database number
-    private static final String LOGGER_NAME = RedisAzureCache.class.getName();
 
     private Class<K> keyClass;
     private Class<V> valueClass;
@@ -29,7 +28,7 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
     private String applicationName;
 
     @Autowired
-    private IRedisClientFactory redisClientFactory;
+    private IRedisClientFactory<K, V> redisClientFactory;
 
     /**
      * Constructor.
@@ -166,6 +165,15 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
     }
 
     /**
+     * Authenticate against the redis cache with the given username and password. Returns true if authentication was successful, false otherwise.
+     */
+    @Override
+    public boolean authenticate(final String username, final String password) {
+        IRedisCache<K, V> redisCache = redisClientFactory.getClient(keyClass, valueClass, redisConfiguration);
+        return redisCache.authenticate(username, password);
+    }
+
+    /**
      * Get redis lock for the given lockKey.
      * @param lockKey name of the lockKey.
      * @return lock object
@@ -177,14 +185,5 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
         }
 
         return redissonClient.getLock(lockKey);
-    }
-
-    /**
-     * Authenticate against the redis cache with the given username and password. Returns true if authentication was successful, false otherwise.
-     */
-    @Override
-    public boolean authenticate(final String username, final String password) {
-        IRedisCache<K, V> redisCache = redisClientFactory.getClient(keyClass, valueClass, redisConfiguration);
-        return redisCache.authenticate(username, password);
     }
 }
