@@ -47,9 +47,9 @@
     <!-- Spring Boot Framework 6.2.0 compatable with Spring Boot 3.4.0 -->
     <!-- https://spring.io/blog/2024/11/14/spring-framework-6-2-0-available-now -->
     <spring-framework.version>6.2.9</spring-framework.version>
-    <spring-boot-dependencies.version>3.5.3</spring-boot-dependencies.version>
+    <spring-boot-dependencies.version>3.5.5</spring-boot-dependencies.version>
 
-    <azure-sdk-bom.version>1.2.36</azure-sdk-bom.version>
+    <azure-sdk-bom.version>1.2.38</azure-sdk-bom.version>
     <azure-spring-boot.version>5.22.0</azure-spring-boot.version>
     <springdoc-openapi-starter-webmvc-ui.version>2.8.9</springdoc-openapi-starter-webmvc-ui.version>
 
@@ -60,7 +60,7 @@
     <azure-mgmt-eventgrid.version>1.0.0-beta-4</azure-mgmt-eventgrid.version>
 
     <!-- Misc Library Versions -->
-    <io.micrometer.version>1.15.2</io.micrometer.version>
+    <io.micrometer.version>1.15.5</io.micrometer.version>
     <jakarta.servlet.version>6.1.0</jakarta.servlet.version>
     <jakarta.inject.version>2.0.1</jakarta.inject.version>
     <json.version>20250517</json.version>
