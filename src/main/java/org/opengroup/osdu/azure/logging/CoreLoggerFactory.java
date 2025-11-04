@@ -39,6 +39,9 @@ public final class CoreLoggerFactory implements ICoreLoggerFactory {
      * @return this instance
      */
     public static CoreLoggerFactory getInstance() {
+        if (instance == null) {
+            instance = new CoreLoggerFactory();
+        }
         return instance;
     }
 

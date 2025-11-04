@@ -18,6 +18,7 @@ import org.opengroup.osdu.azure.partition.PartitionInfoAzure;
 import org.opengroup.osdu.azure.partition.PartitionServiceClient;
 import org.opengroup.osdu.core.common.partition.Property;
 
+import com.azure.identity.DefaultAzureCredential;
 import com.azure.security.keyvault.keys.cryptography.CryptographyClient;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,6 +31,8 @@ class CryptographyClientFactoryImplTest {
   private PartitionServiceClient partitionService;
   @Mock
   private CryptographyClientCache clientCache;
+  @Mock
+  private DefaultAzureCredential defaultAzureCredential;
   @InjectMocks
   private CryptographyClientFactoryImpl factory;
 
