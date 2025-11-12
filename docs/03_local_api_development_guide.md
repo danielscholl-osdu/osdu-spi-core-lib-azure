@@ -33,28 +33,19 @@ Before using local development authentication, ensure you have one of the follow
 
 ## Using the Local Development Library
 
-### Step 1: Build and Install the Library Locally
+### Step 1: Update Your Consuming Service
 
-First, build and install the library with local development support in your local Maven repository:
-
-```bash
-cd /path/to/os-core-lib-azure-community
-mvn clean install -DskipTests
-```
-
-### Step 2: Update Your Consuming Service
-
-Update your service's `pom.xml` to use the locally built version:
+Update your service's `pom.xml` to use the version that has the local development changes in it:
 
 ```xml
 <dependency>
     <groupId>org.opengroup.osdu</groupId>
     <artifactId>core-lib-azure</artifactId>
-    <version>development-SNAPSHOT</version>
+    <version>changeme</version>
 </dependency>
 ```
 
-### Step 3: Configure Local Development Profile
+### Step 2: Configure Local Development Profile
 
 Create or update your `application-local.properties` file in your consuming service:
 
@@ -68,13 +59,9 @@ azure.local.development.enableLocalCredentials=true
 # Disable production authentication methods
 azure.paas.workloadidentity.isEnabled=false
 azure.paas.podidentity.isEnabled=false
-
-# Optional: Disable production-only features
-azure.pubsub.publish=false
-azure.eventgrid.manager.enabled=false
 ```
 
-### Step 4: Run Your Service Locally
+### Step 3: Run Your Service Locally
 
 Run your service with the local profile active:
 
@@ -127,37 +114,6 @@ This configuration should NEVER be used in production!
 ==========================================================
 ```
 
-## Switching Between Versions
-
-### To Use Local Development Version:
-First build and install locally:
-```bash
-cd /path/to/os-core-lib-azure-community
-mvn clean install -DskipTests
-```
-
-Then use in your project:
-```xml
-<dependency>
-    <groupId>org.opengroup.osdu</groupId>
-    <artifactId>core-lib-azure</artifactId>
-    <version>development-SNAPSHOT</version>
-</dependency>
-```
-
-Run with: `mvn spring-boot:run -Dspring.profiles.active=local`
-
-### To Switch Back to Production Version:
-```xml
-<dependency>
-    <groupId>org.opengroup.osdu</groupId>
-    <artifactId>core-lib-azure</artifactId>
-    <version>YOUR_PRODUCTION_VERSION</version>
-</dependency>
-```
-
-Run normally without the local profile.
-
 ## Troubleshooting
 
 ### Common Issues
@@ -182,7 +138,7 @@ az account show  # Verify you're logged in
 #### 4. Dependencies not resolving
 **Solution**: Ensure the local library is installed:
 ```bash
-cd /path/to/os-core-lib-azure-community
+cd /path/to/core-lib-azure
 mvn clean install -DskipTests
 ```
 
@@ -200,10 +156,7 @@ mvn spring-boot:run -Dspring.profiles.active=local
 2. **Use environment-specific configuration files**:
    - `application.properties` (production)
    - `application-local.properties` (local development)
-   - `application-dev.properties` (development environment)
-3. **Regularly refresh your Azure credentials**: `az login`
 4. **Use least-privilege access** - only grant necessary permissions to your account
-5. **Keep the library version separate** between local and production environments
 
 ## Configuration Reference
 
@@ -216,26 +169,4 @@ azure.local.development.enableLocalCredentials=true/false
 # Production Authentication Configuration
 azure.paas.workloadidentity.isEnabled=true/false
 azure.paas.podidentity.isEnabled=true/false
-
-# Feature Toggles
-azure.pubsub.publish=true/false
-azure.eventgrid.manager.enabled=true/false
-azure.serviceBus.manager.enabled=true/false
 ```
-
-### Spring Profiles
-
-- `local`: Enables local development authentication
-- `dev`: Development environment (customize as needed)
-- `prod`: Production environment (default behavior)
-
-## Support
-
-For issues or questions related to local development setup:
-
-1. Check the troubleshooting section above
-2. Verify your Azure account permissions
-3. Ensure the library version matches your requirements
-4. Review application logs for detailed error messages
-
-The local development features are designed to provide a seamless development experience while maintaining security boundaries between local and production environments.
