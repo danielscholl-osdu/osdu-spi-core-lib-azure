@@ -51,6 +51,7 @@ public class HttpClientAzure implements IHttpClient {
 
     @Autowired
     private UrlFetchServiceImpl urlFetchService;
+
     /**
      * Decorated method to send request with circuitbreaker.
      *
@@ -58,6 +59,16 @@ public class HttpClientAzure implements IHttpClient {
      * @return HttpResponse
      */
     public HttpResponse decoratedSend(final HttpRequest httpRequest) {
+        return decoratedSend(httpRequest, false);
+    }
+    /**
+     * Decorated method to send request with circuitbreaker.
+     *
+     * @param httpRequest made by user class
+     * @param isIdempotent whether the request is idempotent
+     * @return HttpResponse
+     */
+    public HttpResponse decoratedSend(final HttpRequest httpRequest, final boolean isIdempotent) {
         org.opengroup.osdu.core.common.model.http.HttpResponse response = null;
         try {
             response = this.urlFetchService.sendRequest(FetchServiceHttpRequest.builder()
@@ -66,7 +77,8 @@ public class HttpClientAzure implements IHttpClient {
                     .queryParams(httpRequest.getQueryParams())
                     .url(httpRequest.getUrl())
                     .headers(httpRequest.getHeaders())
-                    .build());
+                    .build(),
+                    isIdempotent);
         } catch (URISyntaxException e) {
             throw new AppException(HttpStatus.SC_INTERNAL_SERVER_ERROR, e.getReason(), "URI Syntax is not correct", e);
         }
@@ -86,19 +98,31 @@ public class HttpClientAzure implements IHttpClient {
      */
     @Override
     public HttpResponse send(final HttpRequest httpRequest) {
+        return send(httpRequest, false);
+    }
+
+    /**
+     * calls urlfetchservice's send request after applying a circuitbreaker.
+     *
+     * @param httpRequest made by user class
+     * @param isIdempotent whether the request is idempotent
+     * @return HttpResponse
+     */
+    @Override
+    public HttpResponse send(final HttpRequest httpRequest, final boolean isIdempotent) {
         if (!azureCircuitBreakerConfiguration.isEnable()) {
             // Call method without CircuitBreaker
-            return this.decoratedSend(httpRequest);
+            return this.decoratedSend(httpRequest, isIdempotent);
         }
         String circuitBreakerName = getHostName(httpRequest.getUrl());
         if (circuitBreakerName == null) {
             // Call method without CircuitBreaker
-            return this.decoratedSend(httpRequest);
+            return this.decoratedSend(httpRequest, isIdempotent);
         }
         CircuitBreaker circuitBreaker = azureCircuitBreakerConfiguration.getCircuitBreakerRegistry().circuitBreaker(circuitBreakerName);
         circuitBreaker.getEventPublisher()
                 .onStateTransition(event ->  CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("CircuitBreakerEvent : {}", event));
-        Supplier<HttpResponse> httpResponseSupplier = CircuitBreaker.decorateSupplier(circuitBreaker, () -> this.decoratedSend(httpRequest));
+        Supplier<HttpResponse> httpResponseSupplier = CircuitBreaker.decorateSupplier(circuitBreaker, () -> this.decoratedSend(httpRequest, isIdempotent));
 
         // Ensuring CallNotPermittedException that is being thrown by CircuitBreaker is caught and Error Code 503 is thrown.
         // We are throwing Error 503 based on information from https://docs.microsoft.com/en-us/azure/architecture/patterns/circuit-breaker

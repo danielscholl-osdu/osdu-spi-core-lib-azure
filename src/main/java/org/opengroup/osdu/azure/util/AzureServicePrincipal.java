@@ -30,6 +30,7 @@ import com.azure.identity.WorkloadIdentityCredential;
 import com.azure.identity.WorkloadIdentityCredentialBuilder;
 
 import org.opengroup.osdu.core.common.model.http.AppException;
+import org.springframework.stereotype.Component;
 
 /**
  * Class to generate the AAD authentication tokens using WorkloadIdentityCredential.
@@ -39,6 +40,7 @@ import org.opengroup.osdu.core.common.model.http.AppException;
  * - Managed Identity/Pod Identity (legacy approach for AKS)
  * - Environment Variables (for non-AKS scenarios)
  */
+@Component
 public final class AzureServicePrincipal {
 
     private static final int ERROR_STATUS_CODE = 500;
@@ -101,15 +103,16 @@ public final class AzureServicePrincipal {
     }
 
     /**
-     * Gets a token using DefaultAzureCredential with default management scope.
+     * Gets a token using Managed Identity Credential with custom scope.
+     * @param scope The scope to request
      * @return The authentication token string
      */
-    public String getMSIToken() {
+    public String getMSIToken(final String scope) {
         try {
             ManagedIdentityCredential credential = new ManagedIdentityCredentialBuilder().build();
 
             TokenRequestContext requestContextMSI = new TokenRequestContext();
-            requestContextMSI.addScopes(MANAGEMENT_SCOPE);
+            requestContextMSI.addScopes(scope);
             AccessToken tokenMsi = credential.getToken(requestContextMSI).block();
 
             if (tokenMsi != null && tokenMsi.getToken() != null) {
@@ -123,17 +126,26 @@ public final class AzureServicePrincipal {
     }
 
     /**
+     * Gets a token using Managed Identity Credential with default management scope.
+     * @return The authentication token string
+     */
+    public String getMSIToken() {
+        return getMSIToken(MANAGEMENT_SCOPE);
+    }
+
+    /**
      * Method to generate token using Workload Identity.
      * @param app_resource_id The resource ID of the target application
+     * @param scope The scope to request
      * @return AUTHENTICATION TOKEN
      */
-    public String getWIToken(final String app_resource_id) {
+    public String getWIToken(final String app_resource_id, final String scope) {
         try {
             WorkloadIdentityCredentialBuilder workloadIdentityClientBuilder = createworkloadIdentityClientBuilder();
             WorkloadIdentityCredential credential = workloadIdentityClientBuilder.build();
 
             TokenRequestContext requestContext = new TokenRequestContext();
-            requestContext.addScopes(MANAGEMENT_SCOPE);
+            requestContext.addScopes(scope);
             requestContext.addScopes(app_resource_id.concat("/.default"));
             AccessToken token = credential.getToken(requestContext).block();
 
@@ -193,7 +205,15 @@ public final class AzureServicePrincipal {
 
         return credentialBuilder;
     }
-
+    
+    /**
+     * Method to generate token using Workload Identity.
+     * @param app_resource_id The resource ID of the target application
+     * @return AUTHENTICATION TOKEN
+     */
+    public String getWIToken(final String app_resource_id) {
+        return getWIToken(app_resource_id, MANAGEMENT_SCOPE);
+    }
 
     /**
      * Creates a new WorkloadIdentityClientBuilder instance.

@@ -29,6 +29,7 @@ import org.mockito.Mock;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import java.net.URISyntaxException;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -48,7 +49,7 @@ public class HttpClientAzureTest {
         when(azureCircuitBreakerConfiguration.isEnable()).thenReturn(true);
         org.opengroup.osdu.core.common.model.http.HttpResponse  httpResponse = new org.opengroup.osdu.core.common.model.http.HttpResponse();
         httpResponse.setBody("rr");
-        when(urlFetchService.sendRequest(any(FetchServiceHttpRequest.class))).thenReturn(httpResponse);
+        when(urlFetchService.sendRequest(any(FetchServiceHttpRequest.class), anyBoolean())).thenReturn(httpResponse);
         sut.send(HttpRequest.builder().url("http://localhost/").build());
         assertEquals("localhost",azureCircuitBreakerConfiguration.getCircuitBreakerRegistry().getAllCircuitBreakers().stream().toList().get(0).getName());
     }
@@ -61,7 +62,7 @@ public class HttpClientAzureTest {
         when(azureCircuitBreakerConfiguration.isEnable()).thenReturn(true);
         org.opengroup.osdu.core.common.model.http.HttpResponse  httpResponse = new org.opengroup.osdu.core.common.model.http.HttpResponse();
         httpResponse.setBody("rr");
-        when(urlFetchService.sendRequest(any(FetchServiceHttpRequest.class))).thenReturn(httpResponse);
+        when(urlFetchService.sendRequest(any(FetchServiceHttpRequest.class), anyBoolean())).thenReturn(httpResponse);
         sut.send(HttpRequest.builder().url("http://www.localhost/").build());
         assertEquals("localhost",azureCircuitBreakerConfiguration.getCircuitBreakerRegistry().getAllCircuitBreakers().stream().toList().get(0).getName());
     }
@@ -74,7 +75,7 @@ public class HttpClientAzureTest {
         when(azureCircuitBreakerConfiguration.isEnable()).thenReturn(true);
         org.opengroup.osdu.core.common.model.http.HttpResponse  httpResponse = new org.opengroup.osdu.core.common.model.http.HttpResponse();
         httpResponse.setBody("rr");
-        when(urlFetchService.sendRequest(any(FetchServiceHttpRequest.class))).thenReturn(httpResponse);
+        when(urlFetchService.sendRequest(any(FetchServiceHttpRequest.class), anyBoolean())).thenReturn(httpResponse);
         sut.send(HttpRequest.builder().url("http://entitlements/api/v2").build());
         assertEquals("entitlements",azureCircuitBreakerConfiguration.getCircuitBreakerRegistry().getAllCircuitBreakers().stream().toList().get(0).getName());
     }
