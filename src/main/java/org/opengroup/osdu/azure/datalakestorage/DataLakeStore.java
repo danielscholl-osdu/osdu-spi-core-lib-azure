@@ -18,6 +18,7 @@ import com.azure.core.http.rest.PagedIterable;
 import com.azure.storage.common.sas.SasProtocol;
 import com.azure.storage.file.datalake.DataLakeDirectoryClient;
 import com.azure.storage.file.datalake.DataLakeServiceClient;
+import com.azure.storage.file.datalake.models.DataLakeStorageException;
 import com.azure.storage.file.datalake.models.PathItem;
 import com.azure.storage.file.datalake.models.UserDelegationKey;
 import com.azure.storage.file.datalake.sas.DataLakeServiceSasSignatureValues;
@@ -194,8 +195,14 @@ public class DataLakeStore {
      */
     public List<String> getFileNamesFromDirectory(final String dataPartitionId, final String containerName, final String directoryName) {
         DataLakeDirectoryClient dataLakeDirectoryClient = createDataLakeDirectoryClient(dataPartitionId, directoryName, containerName);
-        PagedIterable<PathItem> pathItems = dataLakeDirectoryClient.listPaths(true, false, null, null);
-        return extractFileNameFromPath(pathItems);
+        try {
+            PagedIterable<PathItem> pathItems = dataLakeDirectoryClient.listPaths(true, false, null, null);
+            return extractFileNameFromPath(pathItems);
+        } catch (DataLakeStorageException ex) {
+            throw handleDataLakeStoreException(ex.getStatusCode(), "Error getting files from directory.", ex);
+        } catch (Exception ex) {
+            throw handleDataLakeStoreException(HttpStatus.SC_INTERNAL_SERVER_ERROR, "Generic error occurred.", ex);
+        }
     }
 
     /**
