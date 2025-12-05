@@ -75,18 +75,45 @@ public class AzureServicePrincipalTest {
 
     @Test
     public void TestGenerateMsiToken() throws Exception {
-        // MSI token requires running in Azure environment with managed identity
-        // Testing this would require integration testing or complex mocking
-        // For unit tests, we can verify that the method handles failures properly
-        
-        // This will fail in local environment, which is expected behavior
-        assertThrows(AppException.class, () -> azureServicePrincipal.getMSIToken());
+        // Add ArgumentCaptor to verify scope
+        ArgumentCaptor<TokenRequestContext> requestCaptor = ArgumentCaptor.forClass(TokenRequestContext.class);
+
+        when(azureServicePrincipal.createManagedIdentityCredentialBuilder()).thenReturn(managedIdentityCredentialBuilder);
+        when(managedIdentityCredentialBuilder.build()).thenReturn(managedIdentityCredential);
+        when(managedIdentityCredential.getToken(requestCaptor.capture())).thenReturn(responseMono);
+        when(responseMono.block()).thenReturn(new AccessToken(accessTokenContent, OffsetDateTime.now()));
+
+        String result = azureServicePrincipal.getMSIToken();
+        assertEquals(accessTokenContent, result);
+
+        // Verify the scope
+        TokenRequestContext capturedRequest = requestCaptor.getValue();
+        assertEquals("https://management.azure.com/.default", capturedRequest.getScopes().get(0));
+
+        verify(managedIdentityCredentialBuilder, times(1)).build();
+        verify(managedIdentityCredential, times(1)).getToken(any(TokenRequestContext.class));
+        verify(responseMono, times(1)).block();
     }
 
     @Test
     public void TestGenerateMsiToken_failure() throws Exception {
-        // Test that MSI token fails when not in Azure environment
+        // Add ArgumentCaptor to verify scope
+        ArgumentCaptor<TokenRequestContext> requestCaptor = ArgumentCaptor.forClass(TokenRequestContext.class);
+
+        when(azureServicePrincipal.createManagedIdentityCredentialBuilder()).thenReturn(managedIdentityCredentialBuilder);
+        when(managedIdentityCredentialBuilder.build()).thenReturn(managedIdentityCredential);
+        when(managedIdentityCredential.getToken(requestCaptor.capture())).thenReturn(responseMono);
+        when(responseMono.block()).thenReturn(null);
+
         assertThrows(AppException.class, () -> azureServicePrincipal.getMSIToken());
+
+        // Verify the scope
+        TokenRequestContext capturedRequest = requestCaptor.getValue();
+        assertEquals("https://management.azure.com/.default", capturedRequest.getScopes().get(0));
+
+        verify(managedIdentityCredentialBuilder, times(1)).build();
+        verify(managedIdentityCredential, times(1)).getToken(any(TokenRequestContext.class));
+        verify(responseMono, times(1)).block();
     }
 
     @Test
