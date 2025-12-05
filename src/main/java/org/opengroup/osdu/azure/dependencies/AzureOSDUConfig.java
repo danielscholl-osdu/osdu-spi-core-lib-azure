@@ -25,6 +25,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.context.annotation.Primary;
 
 import jakarta.inject.Named;
 
@@ -50,11 +51,16 @@ public class AzureOSDUConfig {
      * If this strategy fails, the credential will fallback to using a Managed
      * Identity, if possible, and fail otherwise. This logic is implemented
      * in {@link com.azure.identity.DefaultAzureCredential}.
+     * <p>
+     * NOTE: The @Primary annotation is added to resolve bean conflicts with Spring Cloud Azure 5.x+
+     * auto-configuration, which also provides a DefaultAzureCredential bean. This ensures backward
+     * compatibility with services that haven't upgraded to Spring Cloud Azure 5.x yet.
      *
      * @return A configured credential suitable for authenticating with Azure
      * Services
      */
     @Bean
+    @Primary
     @Lazy
     public DefaultAzureCredential azureCredential() {
         return new DefaultAzureCredentialBuilder().build();
