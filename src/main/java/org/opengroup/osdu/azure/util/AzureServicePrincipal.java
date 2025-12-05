@@ -103,7 +103,7 @@ public final class AzureServicePrincipal {
      */
     public String getMSIToken(final String scope) {
         try {
-            ManagedIdentityCredential credential = new ManagedIdentityCredentialBuilder().build();
+            ManagedIdentityCredential credential = createManagedIdentityCredentialBuilder().build();
 
             TokenRequestContext requestContextMSI = new TokenRequestContext();
             requestContextMSI.addScopes(scope);
@@ -170,5 +170,15 @@ public final class AzureServicePrincipal {
      */
     protected WorkloadIdentityCredentialBuilder createworkloadIdentityClientBuilder() {
         return new WorkloadIdentityCredentialBuilder();
+    }
+
+    /**
+     * Creates a new ManagedIdentityCredentialBuilder instance.
+     * Protected method to allow mocking in tests.
+     *
+     * @return A new instance of ManagedIdentityCredentialBuilder
+     */
+    protected ManagedIdentityCredentialBuilder createManagedIdentityCredentialBuilder() {
+        return new ManagedIdentityCredentialBuilder();
     }
 }
