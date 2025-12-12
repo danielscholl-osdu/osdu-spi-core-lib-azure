@@ -14,7 +14,7 @@
   ~ See the License for the specific language governing permissions and
   ~ limitations under the License.
   -->
-<Configuration packages="com.microsoft.applicationinsights.log4j.v2,com.microsoft.azure.oak.ifxaudit" strict="true">
+<Configuration packages="com.microsoft.applicationinsights.log4j.v2,com.microsoft.azure.oak.ifxaudit,com.microsoft.azure.oak.opentel" strict="true">
     <Scripts>
         <Script name="isAiAppenderEnabled" language="nashorn"><![CDATA[
             var System = Java.type('java.lang.System'),
@@ -40,7 +40,8 @@
                 <PatternLayout pattern="%d{yyyy-MM-dd HH:mm:ss.SSS} %5p ${hostName} --- [%15.15t] %-40.40c{1.} correlation-id=%X{correlation-id} data-partition-id=%X{data-partition-id} api-method=%X{api-method} operation-name=%X{operation-name} user-id=%X{user-id} app-id=%X{app-id} oid=%X{oid}:%m%xEx{full}{filters(org.apache,org.springframework,sun.reflect,jakarta.servlet)}{separator(|)}%n"/>
             </Console>
             <ApplicationInsightsAppender name="aiAppender" />
-            <AzureIfxAuditAppender name="azureAuditAppender"/>
+            <AzureIfxAuditAppender name="ifxAuditAppender"/>
+            <AzureOpenTelAuditAppender name="otelAuditAppender"/>
         </Appenders>
         <Loggers>
     <!--        TODO: In future it will be changed to warn-->
@@ -62,9 +63,14 @@
         </logger>
         <logger name="AzureAuditLogger">
             <AppenderRef ref="Console" />
-            <AppenderRef ref="azureAuditAppender">
+            <AppenderRef ref="ifxAuditAppender">
                 <ScriptFilter onMatch="ACCEPT" onMisMatch="DENY">
-                    <ScriptRef ref="isAuditAppenderEnabled" />
+                    <ScriptRef ref="isAuditAppenderEnabled"/>
+                </ScriptFilter>
+            </AppenderRef>
+            <AppenderRef ref="otelAuditAppender">
+                <ScriptFilter onMatch="ACCEPT" onMisMatch="DENY">
+                    <ScriptRef ref="isAuditAppenderEnabled"/>
                 </ScriptFilter>
             </AppenderRef>
         </logger>
