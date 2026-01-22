@@ -118,6 +118,10 @@ public class CoreLoggerTest {
                 .message("TestAuditMessage")
                 .resources(resource)
                 .user("TestUser")
+                .userIpAddress("127.0.0.1")
+                .userAgent("TestAgent")
+                .requiredGroupsForAction(new ArrayList<>())
+                .userAuthorizedGroupName("")
                 .build();
         coreLogger.logAudit(payload);
         verify(spySlf4jLogger).info("{}", payload);
