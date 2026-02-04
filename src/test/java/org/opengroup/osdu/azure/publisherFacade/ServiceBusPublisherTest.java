@@ -34,10 +34,14 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 import static org.mockito.MockitoAnnotations.initMocks;
+
+import org.opengroup.osdu.core.common.model.http.AppException;
 
 public class ServiceBusPublisherTest {
     private static final String DATA_PARTITION_WITH_FALLBACK_ACCOUNT_ID = "data-partition-account-id";
@@ -132,6 +136,44 @@ public class ServiceBusPublisherTest {
         } catch (Exception e) {
             assertNotNull(e);
         }
+    }
+
+    @Test
+    public void shouldThrowAppExceptionWith500StatusCodeWhenRetryLimitExceeded() throws Exception {
+        // Arrange
+        doReturn("2").when(pubsubConfiguration).getRetryLimit();
+        doReturn(topicClient).when(topicClientFactory).getClient(PARTITION_ID, SERVICE_BUS_TOPIC_NAME);
+        doThrow(new ServiceBusException(false, "Service Bus unavailable")).when(topicClient).send(any(Message.class));
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> 
+            sut.publishToServiceBus(dpsHeaders, publisherInfo, Optional.empty())
+        );
+
+        assertEquals(500, exception.getError().getCode());
+        assertEquals("Internal Server Error", exception.getError().getReason());
+        assertEquals("Failed to publish message in service bus", exception.getError().getMessage());
+        
+        // Verify retry attempts: initial + retryLimit (0, 1, 2) = 3 total attempts
+        verify(topicClient, times(3)).send(any(Message.class));
+    }
+
+    @Test
+    public void shouldRetryAndEventuallySucceed() throws Exception {
+        // Arrange
+        doReturn("2").when(pubsubConfiguration).getRetryLimit();
+        doReturn(topicClient).when(topicClientFactory).getClient(PARTITION_ID, SERVICE_BUS_TOPIC_NAME);
+        // Fail first two attempts, succeed on third
+        doThrow(new ServiceBusException(false, "Transient error"))
+            .doThrow(new ServiceBusException(false, "Transient error"))
+            .doNothing()
+            .when(topicClient).send(any(Message.class));
+
+        // Act - should not throw
+        sut.publishToServiceBus(dpsHeaders, publisherInfo, Optional.empty());
+
+        // Assert - verify 3 attempts were made
+        verify(topicClient, times(3)).send(any(Message.class));
     }
 
 }

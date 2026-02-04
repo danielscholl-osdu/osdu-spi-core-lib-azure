@@ -101,7 +101,7 @@ public class ServiceBusPublisher {
                 retryCount--;
                 if (retryCount < 0) {
                     LOGGER.error("Retry limit Exceeded.Unable to publish message with message id {}", message.getMessageId());
-                    throw new AppException(501, "Internal Server Error", "Failed to publish message in service bus", e);
+                    throw new AppException(500, "Internal Server Error", "Failed to publish message in service bus", e);
                 }
             }
         }
