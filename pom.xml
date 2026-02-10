@@ -42,7 +42,7 @@
     <repos.id>os-core</repos.id>
     <repos.url>https://pkgs.dev.azure.com/slb-des-ext-collaboration/_packaging/os-core/maven/v1</repos.url>
 
-    <osdu.oscorecommon.version>5.1.0</osdu.oscorecommon.version>
+    <osdu.oscorecommon.version>5.1.1</osdu.oscorecommon.version>
 
     <!-- Spring Boot 3.5.9 provides Netty 4.1.130.Final which fixes CVE-2025-67735 -->
     <!-- Spring Framework 6.2.15 is compatible with Spring Boot 3.5.9 -->
@@ -134,9 +134,8 @@
         <version>3.20.0</version>
       </dependency>
       <!--
-        lettuce-core Fix CVE-2024-47535
-        Spring Boot 3.5.9 provides 6.6.0.RELEASE, we need 6.8.1.RELEASE.
-        Remove when spring-boot-dependencies references a version of lettuce-core >= 6.8.1.RELEASE.
+        lettuce-core upgraded to 6.8.1 for RedisCredentialsProvider support
+        Enables automatic MSI token refresh without manual connection recreation.
       -->
       <dependency>
           <groupId>io.lettuce</groupId>
