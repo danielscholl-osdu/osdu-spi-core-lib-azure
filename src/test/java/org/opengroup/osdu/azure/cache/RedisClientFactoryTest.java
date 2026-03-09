@@ -1,13 +1,31 @@
+/*
+ * Copyright © Microsoft Corporation
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.opengroup.osdu.azure.cache;
 
 import com.azure.core.credential.TokenRequestContext;
 import com.azure.core.exception.ResourceNotFoundException;
 import com.azure.identity.DefaultAzureCredential;
 import com.azure.security.keyvault.secrets.SecretClient;
-import org.junit.jupiter.api.*;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -24,9 +42,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.*;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.MockitoAnnotations.openMocks;
 
 @ExtendWith(MockitoExtension.class)
@@ -53,17 +82,17 @@ public class RedisClientFactoryTest {
     @Mock
     private RedisCache<String, List<String>> mockRedisCache;
     @InjectMocks
-    private RedisClientFactory<String, List<String>> redisClientFactory;
+    private RedisClientFactory<List<String>> redisClientFactory;
 
     @SuppressWarnings("unchecked")
     private static final Class<List<String>> LIST_STRING_CLASS = (Class<List<String>>) (Class<?>) List.class;
-    private static final String DEFAULT_CACHE_KEY = String.format("%s-%s-%s", String.class, List.class, "defaultCodec");
+    private static final String DEFAULT_CACHE_KEY = String.format("%s-%s", List.class, "defaultCodec");
 
     /**
      * Helper method to create cache key for given codec class name.
      */
     private String createCacheKey(String codecClassName) {
-        return String.format("%s-%s-%s", String.class, List.class, codecClassName);
+        return String.format("%s-%s", List.class, codecClassName);
     }
 
     /**
@@ -106,7 +135,7 @@ public class RedisClientFactoryTest {
         lenient().when(msiConfiguration.getIsEnabled()).thenReturn(false);
         setupCachedClient(DEFAULT_CACHE_KEY, redisCache);
 
-        IRedisCache<String, List<String>> redisClient = this.redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration, null);
+        IRedisCache<String, List<String>> redisClient = this.redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
 
         assertSame(redisCache, redisClient);
     }
@@ -117,7 +146,7 @@ public class RedisClientFactoryTest {
         when(this.redisClientMap.containsKey(DEFAULT_CACHE_KEY)).thenReturn(false);
         when(this.redisClientMap.computeIfAbsent(any(), any())).thenReturn(null);
 
-        IRedisCache<String, List<String>> redisClient = this.redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration, null);
+        IRedisCache<String, List<String>> redisClient = this.redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
 
         assertTrue(redisClient instanceof NoOpRedisCache);
     }
@@ -132,7 +161,7 @@ public class RedisClientFactoryTest {
         setupCachedClient(DEFAULT_CACHE_KEY, noOpRedisCache);
         when(this.redisClientMap.computeIfAbsent(any(), any())).thenReturn(redisCache);
 
-        IRedisCache<String, List<String>> redisClient = this.redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration, null);
+        IRedisCache<String, List<String>> redisClient = this.redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
         resetSingleton();
 
         assertTrue(redisClient instanceof RedisCache);
@@ -154,7 +183,7 @@ public class RedisClientFactoryTest {
         lenient().when(msiConfiguration.getIsEnabled()).thenReturn(false);
         setupCachedClient(DEFAULT_CACHE_KEY, mockRedisCache);
 
-        IRedisCache<String, List<String>> result = redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration, null);
+        IRedisCache<String, List<String>> result = redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
 
         verifyNoMsiAuthentication();
         assertSame(mockRedisCache, result);
@@ -167,7 +196,7 @@ public class RedisClientFactoryTest {
         lenient().when(redisConfiguration.getPrincipalId()).thenReturn(principalId);
         setupCachedClient(DEFAULT_CACHE_KEY, mockRedisCache);
 
-        IRedisCache<String, List<String>> result = redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration, null);
+        IRedisCache<String, List<String>> result = redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
 
         verifyNoMsiAuthentication();
         assertSame(mockRedisCache, result);
@@ -187,10 +216,8 @@ public class RedisClientFactoryTest {
         setupCachedClient(DEFAULT_CACHE_KEY, redisCache1);
         setupCachedClient(customCodecCacheKey, redisCache2);
 
-        IRedisCache<String, List<String>> clientWithDefaultCodec =
-            this.redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration, null);
-        IRedisCache<String, List<String>> clientWithCustomCodec =
-            this.redisClientFactory.getClient(String.class, LIST_STRING_CLASS, redisConfiguration, customCodec);
+        IRedisCache<String, List<String>> clientWithDefaultCodec = this.redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
+        IRedisCache<String, List<String>> clientWithCustomCodec = this.redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, customCodec);
 
         assertSame(redisCache1, clientWithDefaultCodec);
         assertSame(redisCache2, clientWithCustomCodec);
@@ -200,7 +227,7 @@ public class RedisClientFactoryTest {
     @Test
     public void should_initialize_redis_client_map() throws Exception {
         // Create a new instance to test initialization
-        RedisClientFactory<String, List<String>> newFactory = new RedisClientFactory<>();
+        RedisClientFactory<List<String>> newFactory = new RedisClientFactory<>();
 
         // Call the initialize method directly
         newFactory.initialize();
@@ -213,6 +240,65 @@ public class RedisClientFactoryTest {
         assertNotNull(map);
         assertTrue(map instanceof ConcurrentHashMap);
         assertTrue(map.isEmpty());
+    }
+
+    @ParameterizedTest(name = "MSI enabled={0}, principalId={1}, isRedisson={2}")
+    @CsvSource(nullValues = "NULL", value = {
+            "false, principal-123, false",
+            "true,  NULL,          false",
+            "true,  ,              false",
+            "false, principal-123, true",
+            "true,  NULL,          true",
+            "true,  ,              true"
+    })
+    public void should_throw_exception_when_direct_hostname_without_valid_msi(
+            boolean isMsiEnabled,
+            String principalId,
+            boolean isRedissonClient) {
+        
+        when(redisConfiguration.getHostname()).thenReturn("redis.example.com");
+        when(redisConfiguration.getPrincipalId()).thenReturn(principalId);
+        when(msiConfiguration.getIsEnabled()).thenReturn(isMsiEnabled);
+        
+        if (isRedissonClient) {
+            setupLoggerMock();
+
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                redisClientFactory.getRedissonClient(DUMMY_NAME, redisConfiguration)
+            );
+
+            assertEquals("MSI authentication with valid principal ID is required when using direct hostname for Redis connection", exception.getMessage());
+            resetSingleton();
+        } else {
+            when(redisClientMap.containsKey(anyString())).thenReturn(false);
+            when(redisClientMap.computeIfAbsent(anyString(), any())).thenAnswer(invocation -> {
+                java.util.function.Function<String, IRedisCache<String, List<String>>> function = invocation.getArgument(1);
+                return function.apply(invocation.getArgument(0));
+            });
+
+            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null)
+            );
+
+            assertEquals("MSI authentication with valid principal ID is required when using direct hostname for Redis connection", exception.getMessage());
+        }
+    }
+
+    @Test
+    public void should_use_direct_hostname_when_provided_with_valid_msi() {
+        String directHostname = "redis.example.com";
+        String principalId = "principal-123";
+
+        lenient().when(redisConfiguration.getHostname()).thenReturn(directHostname);
+        lenient().when(redisConfiguration.getPrincipalId()).thenReturn(principalId);
+        lenient().when(msiConfiguration.getIsEnabled()).thenReturn(true);
+        setupCachedClient(DEFAULT_CACHE_KEY, mockRedisCache);
+
+        IRedisCache<String, List<String>> result = redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
+
+        assertSame(mockRedisCache, result);
+        // Verify that Key Vault was NOT accessed (direct hostname bypasses it)
+        verify(secretClient, never()).getSecret(anyString());
     }
 
     /**
