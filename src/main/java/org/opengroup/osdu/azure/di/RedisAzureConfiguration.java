@@ -19,6 +19,7 @@ public class RedisAzureConfiguration {
     private String hostKey;
     private String passwordKey;
     private String principalId;
+    private String hostname;
 
     /**
      * Constructor with default hostKey and passwordKey.
@@ -29,7 +30,7 @@ public class RedisAzureConfiguration {
      * @param pCommandTimeout commandTimeout
      */
     public RedisAzureConfiguration(final int pDatabase, final int pExpiration, final int pPort, final long pConnectionTimeout, final int pCommandTimeout) {
-        this(pDatabase, pExpiration, pPort, pConnectionTimeout, pCommandTimeout, "redis-hostname", "redis-password", null);
+        this(pDatabase, pExpiration, pPort, pConnectionTimeout, pCommandTimeout, "redis-hostname", "redis-password", null, null);
     }
 
     /**
@@ -42,6 +43,20 @@ public class RedisAzureConfiguration {
      * @param pPrincipalId principalId for Redis MSI authentication
      */
     public RedisAzureConfiguration(final int pDatabase, final int pExpiration, final int pPort, final long pConnectionTimeout, final int pCommandTimeout, final String pPrincipalId) {
-        this(pDatabase, pExpiration, pPort, pConnectionTimeout, pCommandTimeout, "redis-hostname", "redis-password", pPrincipalId);
+        this(pDatabase, pExpiration, pPort, pConnectionTimeout, pCommandTimeout, "redis-hostname", "redis-password", pPrincipalId, null);
+    }
+
+    /**
+     * Constructor with direct hostname instead of hostKey, using MSI authentication.
+     * @param pDatabase database
+     * @param pExpiration expiration
+     * @param pPort port
+     * @param pConnectionTimeout connectionTimeout
+     * @param pCommandTimeout commandTimeout
+     * @param pHostname direct hostname for Redis connection
+     * @param pPrincipalId principalId for Redis MSI authentication (required)
+     */
+    public RedisAzureConfiguration(final int pDatabase, final int pExpiration, final int pPort, final long pConnectionTimeout, final int pCommandTimeout, final String pPrincipalId, final String pHostname) {
+        this(pDatabase, pExpiration, pPort, pConnectionTimeout, pCommandTimeout, null, null, pPrincipalId, pHostname);
     }
 }

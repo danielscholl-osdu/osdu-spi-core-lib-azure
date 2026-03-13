@@ -16,33 +16,40 @@ import org.springframework.beans.factory.annotation.Value;
  * This class delegates to a factory that creates properly configured RedisCache instances.
  * Subclasses can override getCodec() to provide a custom codec implementation.
  * </p>
- * @param <K> key class
  * @param <V> value class
  */
-public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
+public class RedisAzureCache<V> implements IRedisCache<String, V> {
 
-    private final Class<K> keyClass;
+    private static final int AZURE_MANAGED_REDIS_PORT = 10000;
+
     private final Class<V> valueClass;
     private final RedisAzureConfiguration redisConfiguration;
-    private final RedisCodec<K, V> codec;
+    private final RedisCodec<String, V> codec;
+    private final String keyPrefix;
 
     @Value("${spring.application.name}:corelibazure")
     private String applicationName;
 
     @Autowired
-    private IRedisClientFactory<K, V> redisClientFactory;
+    private IRedisClientFactory<V> redisClientFactory;
 
     /**
      * Constructor.
-     * @param keyClassType key class type
      * @param valueClassType value class type
      * @param redisAzureConfiguration configuration for redis client
      */
-    public RedisAzureCache(final Class<K> keyClassType, final Class<V> valueClassType, final RedisAzureConfiguration redisAzureConfiguration) {
-        this.keyClass = keyClassType;
+    public RedisAzureCache(final Class<V> valueClassType, final RedisAzureConfiguration redisAzureConfiguration) {
         this.valueClass = valueClassType;
         this.redisConfiguration = redisAzureConfiguration;
-        this.codec = getCodec(keyClassType, valueClassType); // can be overridden by subclasses
+        this.codec = getCodec(String.class, valueClassType); // can be overridden by subclasses
+
+        // Azure Managed Redis (AMR) on port 10000 doesn't support multiple logical databases,
+        // so we use a key prefix like "db7:" to simulate database isolation and avoid collisions.
+        // Azure Cache for Redis on port 6380 supports multiple logical databases natively,
+        // so an empty keyPrefix means no prefixing is needed.
+        this.keyPrefix = redisAzureConfiguration.getPort() == AZURE_MANAGED_REDIS_PORT
+            ? "db" + redisAzureConfiguration.getDatabase() + ":"
+            : "";
     }
 
     /**
@@ -51,8 +58,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @param value value to save
      */
     @Override
-    public void put(final K key, final V value) {
-        getClient().put(key, value);
+    public void put(final String key, final V value) {
+        getClient().put(getPrefixedKey(key), value);
     }
 
     /**
@@ -61,8 +68,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @return value
      */
     @Override
-    public V get(final K key) {
-        return getClient().get(key);
+    public V get(final String key) {
+        return getClient().get(getPrefixedKey(key));
     }
 
     /**
@@ -70,8 +77,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @param key key
      */
     @Override
-    public void delete(final K key) {
-        getClient().delete(key);
+    public void delete(final String key) {
+        getClient().delete(getPrefixedKey(key));
     }
 
     /**
@@ -89,8 +96,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @param o value
      */
     @Override
-    public void put(final K k, final long l, final V o) {
-        getClient().put(k, l, o);
+    public void put(final String k, final long l, final V o) {
+        getClient().put(getPrefixedKey(k), l, o);
     }
 
     /**
@@ -100,8 +107,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @return true if updated, false otherwise
      */
     @Override
-    public boolean updateTtl(final K k, final long l) {
-        return getClient().updateTtl(k, l);
+    public boolean updateTtl(final String k, final long l) {
+        return getClient().updateTtl(getPrefixedKey(k), l);
     }
 
     /**
@@ -110,8 +117,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @return ttl in milliseconds
      */
     @Override
-    public Long getTtl(final K k) {
-        return getClient().getTtl(k);
+    public Long getTtl(final String k) {
+        return getClient().getTtl(getPrefixedKey(k));
     }
 
     /**
@@ -129,8 +136,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @return incremented value
      */
     @Override
-    public Long increment(final K k) {
-        return getClient().increment(k);
+    public Long increment(final String k) {
+        return getClient().increment(getPrefixedKey(k));
     }
 
     /**
@@ -140,8 +147,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @return incremented value
      */
     @Override
-    public Long incrementBy(final K k, final long l) {
-        return getClient().incrementBy(k, l);
+    public Long incrementBy(final String k, final long l) {
+        return getClient().incrementBy(getPrefixedKey(k), l);
     }
 
     /**
@@ -150,8 +157,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @return decremented value
      */
     @Override
-    public Long decrement(final K k) {
-        return getClient().decrement(k);
+    public Long decrement(final String k) {
+        return getClient().decrement(getPrefixedKey(k));
     }
 
     /**
@@ -161,8 +168,8 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @return decremented value
      */
     @Override
-    public Long decrementBy(final K k, final long l) {
-        return getClient().decrementBy(k, l);
+    public Long decrementBy(final String k, final long l) {
+        return getClient().decrementBy(getPrefixedKey(k), l);
     }
 
     /**
@@ -176,7 +183,7 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
      * @return RedisCodec instance to use for serialization
      */
     @Override
-    public RedisCodec<K, V> getCodec(final Class<K> classOfK, final Class<V> classOfV) {
+    public RedisCodec<String, V> getCodec(final Class<String> classOfK, final Class<V> classOfV) {
         return CompressionCodec.valueCompressor(new JsonCodec<>(classOfK, classOfV), CompressionCodec.CompressionType.GZIP);
     }
 
@@ -202,14 +209,23 @@ public class RedisAzureCache<K, V> implements IRedisCache<K, V> {
             return null;
         }
 
-        return redissonClient.getLock(lockKey);
+        return redissonClient.getLock(getPrefixedKey(lockKey));
     }
 
     /**
      * Get the underlying Redis client, lazily created by the factory.
      * @return the Redis cache client
      */
-    private IRedisCache<K, V> getClient() {
-        return redisClientFactory.getClient(keyClass, valueClass, redisConfiguration, codec);
+    private IRedisCache<String, V> getClient() {
+        return redisClientFactory.getClient(valueClass, redisConfiguration, codec);
+    }
+
+    /**
+     * Applies the key prefix to simulate database isolation.
+     * @param key the original key
+     * @return the prefixed key (for AMR) or the original key (for Azure Cache for Redis)
+     */
+    private String getPrefixedKey(final String key) {
+        return keyPrefix + key;
     }
 }
