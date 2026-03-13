@@ -73,6 +73,17 @@ public class ElasticClusterSettingsService implements IElasticSettingService {
     @Override
     public ClusterSettings getElasticClusterInformation() {
         TenantInfo tenantInfo = tenantProvider.get().getTenantInfo();
+        return getElasticClusterInformationForPartition(tenantInfo.getDataPartitionId());
+    }
+
+    /**
+     * Retrieve {@link ClusterSettings} for particular partition.
+     * @param partitionId Partition ID.
+     * @return {@link ClusterSettings} that can be used to connect to Elasticsearch.
+     */
+    @Override
+    public ClusterSettings getElasticClusterInformationForPartition(final String partitionId) {
+        TenantInfo tenantInfo = tenantProvider.get().getTenantInfoForPartition(partitionId);
         String cacheKey = this.clusterSettingsCache.getCacheKey(tenantInfo.getName());
 
         ClusterSettings cachedSettings = this.clusterSettingsCache.get(cacheKey);

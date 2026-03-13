@@ -42,7 +42,7 @@
     <repos.id>os-core</repos.id>
     <repos.url>https://pkgs.dev.azure.com/slb-des-ext-collaboration/_packaging/os-core/maven/v1</repos.url>
 
-    <osdu.oscorecommon.version>5.1.1</osdu.oscorecommon.version>
+    <osdu.oscorecommon.version>5.4.0</osdu.oscorecommon.version>
 
     <!-- Spring Boot 3.5.9 provides Netty 4.1.130.Final which fixes CVE-2025-67735 -->
     <!-- Spring Framework 6.2.15 is compatible with Spring Boot 3.5.9 -->
