@@ -57,6 +57,6 @@ public class RedisAzureConfiguration {
      * @param pPrincipalId principalId for Redis MSI authentication (required)
      */
     public RedisAzureConfiguration(final int pDatabase, final int pExpiration, final int pPort, final long pConnectionTimeout, final int pCommandTimeout, final String pPrincipalId, final String pHostname) {
-        this(pDatabase, pExpiration, pPort, pConnectionTimeout, pCommandTimeout, null, null, pPrincipalId, pHostname);
+        this(pDatabase, pExpiration, pPort, pConnectionTimeout, pCommandTimeout, "redis-hostname", "redis-password", pPrincipalId, pHostname);
     }
 }

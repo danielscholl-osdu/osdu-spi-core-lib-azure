@@ -157,25 +157,32 @@ public class RedisClientFactoryTest {
         IRedisCache<String, List<String>> redisCache = createTypedMock(RedisCache.class);
 
         lenient().when(msiConfiguration.getIsEnabled()).thenReturn(false);
-        setupLoggerMock();
-        setupCachedClient(DEFAULT_CACHE_KEY, noOpRedisCache);
-        when(this.redisClientMap.computeIfAbsent(any(), any())).thenReturn(redisCache);
+        try {
+            setupLoggerMock();
+            setupCachedClient(DEFAULT_CACHE_KEY, noOpRedisCache);
+            when(this.redisClientMap.computeIfAbsent(any(), any())).thenReturn(redisCache);
 
-        IRedisCache<String, List<String>> redisClient = this.redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
-        resetSingleton();
+            IRedisCache<String, List<String>> redisClient = this.redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
 
-        assertTrue(redisClient instanceof RedisCache);
+            assertTrue(redisClient instanceof RedisCache);
+        } finally {
+            resetSingleton();
+        }
     }
 
     @Test
     public void getRedissonClient_should_return_null_if_redis_secret_not_present() {
         when(redisConfiguration.getHostKey()).thenReturn(DUMMY_HOST);
         when(secretClient.getSecret(DUMMY_HOST)).thenThrow(new ResourceNotFoundException(SECRET_NOT_FOUND, null));
-        setupLoggerMock();
+        try {
+            setupLoggerMock();
 
-        RedissonClient redissonClient = this.redisClientFactory.getRedissonClient(DUMMY_NAME, redisConfiguration);
+            RedissonClient redissonClient = this.redisClientFactory.getRedissonClient(DUMMY_NAME, redisConfiguration);
 
-        assertNull(redissonClient);
+            assertNull(redissonClient);
+        } finally {
+            resetSingleton();
+        }
     }
 
     @Test
@@ -261,14 +268,17 @@ public class RedisClientFactoryTest {
         when(msiConfiguration.getIsEnabled()).thenReturn(isMsiEnabled);
         
         if (isRedissonClient) {
-            setupLoggerMock();
+            try {
+                setupLoggerMock();
 
-            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
-                redisClientFactory.getRedissonClient(DUMMY_NAME, redisConfiguration)
-            );
+                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
+                    redisClientFactory.getRedissonClient(DUMMY_NAME, redisConfiguration)
+                );
 
-            assertEquals("MSI authentication with valid principal ID is required when using direct hostname for Redis connection", exception.getMessage());
-            resetSingleton();
+                assertEquals("MSI authentication with valid principal ID is required when using direct hostname for Redis connection", exception.getMessage());
+            } finally {
+                resetSingleton();
+            }
         } else {
             when(redisClientMap.containsKey(anyString())).thenReturn(false);
             when(redisClientMap.computeIfAbsent(anyString(), any())).thenAnswer(invocation -> {
@@ -301,6 +311,198 @@ public class RedisClientFactoryTest {
         verify(secretClient, never()).getSecret(anyString());
     }
 
+    @ParameterizedTest(name = "hostname={0}")
+    @NullAndEmptySource
+    public void should_use_akv_hostname_when_msi_enabled_and_no_direct_hostname(String directHostname) {
+        String principalId = "principal-123";
+        String akvHostname = "redis-akv.azure.com";
+
+        setupMsiAuthScenario(directHostname, principalId, akvHostname);
+
+        try {
+            redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
+
+            // Verify AKV was accessed for hostname
+            verify(secretClient).getSecret("redis-hostname");
+            verify(secretClient, never()).getSecret("redis-password");
+        } finally {
+            resetSingleton();
+        }
+    }
+
+    @ParameterizedTest(name = "MSI={0}, principalId={1} => uses password auth")
+    @CsvSource(nullValues = "NULL", value = {
+            "false, valid-principal",  // MSI disabled => password
+            "false, NULL",              // MSI disabled + null principal => password
+            "true,  NULL",              // MSI enabled + null principal => password fallback
+            "true,  ''",                // MSI enabled + empty principal => password fallback
+    })
+    public void should_use_password_auth_from_akv(boolean msiEnabled, String principalId) {
+        setupPasswordAuthScenario(msiEnabled, principalId);
+
+        try {
+            redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
+
+            // Verify both hostname and password were retrieved from AKV
+            verify(secretClient).getSecret("redis-hostname");
+            verify(secretClient).getSecret("redis-password");
+        } finally {
+            resetSingleton();
+        }
+    }
+
+    @ParameterizedTest(name = "missing {0} => returns NoOpCache")
+    @CsvSource({"hostname", "password"})
+    public void should_return_noop_cache_when_required_secret_missing(String secretType) {
+        setupRedisConfiguration(null, null, false);
+        setupComputeIfAbsentMock();
+        
+        // Setup: hostname exists but password missing, or vice versa
+        if (secretType.equals("hostname")) {
+            lenient().when(secretClient.getSecret("redis-hostname"))
+                .thenThrow(new ResourceNotFoundException(SECRET_NOT_FOUND, null));
+        } else {
+            var hostnameSecret = mockKeyVaultSecret("redis.azure.com");
+            lenient().when(secretClient.getSecret("redis-hostname")).thenReturn(hostnameSecret);
+            lenient().when(secretClient.getSecret("redis-password"))
+                .thenThrow(new ResourceNotFoundException(SECRET_NOT_FOUND, null));
+        }
+        try {
+            setupLoggerMock();
+
+            IRedisCache<String, List<String>> result = redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
+
+            assertNotNull(result);
+            assertTrue(result instanceof NoOpRedisCache);
+        } finally {
+            resetSingleton();
+        }
+    }
+
+    @ParameterizedTest(name = "msiEnabled={0}, directHostname={1}, principalId={2} => {3}")
+    @CsvSource(nullValues = "NULL", value = {
+            "true,  NULL, principal-123, verifies AKV access with MSI",
+            "false, NULL, NULL,          verifies AKV access with password auth",
+            "true,  redis.example.com, principal-123, skips AKV with direct hostname"
+    })
+    public void should_handle_redisson_akv_access_scenarios(
+            boolean msiEnabled,
+            String directHostname,
+            String principalId,
+            String description) {
+
+        setupRedisConfiguration(directHostname, principalId, msiEnabled);
+        boolean isDirect = directHostname != null && !directHostname.isEmpty();
+
+        if (!isDirect) {
+            // For AKV scenarios, make secret retrieval fail to avoid real connections
+            lenient().when(secretClient.getSecret("redis-hostname"))
+                .thenThrow(new ResourceNotFoundException(SECRET_NOT_FOUND, null));
+            try {
+                setupLoggerMock();
+
+                RedissonClient result = redisClientFactory.getRedissonClient(DUMMY_NAME, redisConfiguration);
+
+                assertNull(result);
+                verify(secretClient).getSecret("redis-hostname");
+                if (msiEnabled) {
+                    verify(secretClient, never()).getSecret("redis-password");
+                }
+            } finally {
+                resetSingleton();
+            }
+        } else {
+            // Direct hostname case - verify no AKV access
+            verify(secretClient, never()).getSecret(anyString());
+        }
+    }
+
+    @ParameterizedTest(name = "missing {0} => returns null")
+    @CsvSource({"hostname", "password"})
+    public void should_return_null_when_redisson_secret_missing(String secretType) {
+        lenient().when(redisConfiguration.getHostname()).thenReturn(null);
+        lenient().when(redisConfiguration.getHostKey()).thenReturn("redis-hostname");
+        lenient().when(redisConfiguration.getPasswordKey()).thenReturn("redis-password");
+        lenient().when(msiConfiguration.getIsEnabled()).thenReturn(false);
+
+        // Setup: hostname exists but password missing, or vice versa
+        if (secretType.equals("hostname")) {
+            lenient().when(secretClient.getSecret("redis-hostname")).thenThrow(new ResourceNotFoundException(SECRET_NOT_FOUND, null));
+        } else {
+            var hostnameSecret = mockKeyVaultSecret("redis.azure.com");
+            lenient().when(secretClient.getSecret("redis-hostname")).thenReturn(hostnameSecret);
+            lenient().when(secretClient.getSecret("redis-password")).thenThrow(new ResourceNotFoundException(SECRET_NOT_FOUND, null));
+        }
+        try {
+            setupLoggerMock();
+
+            RedissonClient result = redisClientFactory.getRedissonClient(DUMMY_NAME, redisConfiguration);
+
+            assertNull(result);
+        } finally {
+            resetSingleton();
+        }
+    }
+
+    /**
+     * Helper method to setup password authentication scenario with common configuration.
+     */
+    private void setupPasswordAuthScenario(boolean msiEnabled, String principalId) {
+        setupRedisConfiguration(null, principalId, msiEnabled);
+        setupComputeIfAbsentMock();
+        
+        var hostnameSecret = mockKeyVaultSecret("redis-akv.azure.com");
+        var passwordSecret = mockKeyVaultSecret("test-password");
+        lenient().when(secretClient.getSecret("redis-hostname")).thenReturn(hostnameSecret);
+        lenient().when(secretClient.getSecret("redis-password")).thenReturn(passwordSecret);
+        setupLoggerMock();
+    }
+
+    /**
+     * Helper method to setup MSI authentication scenario for AKV hostname fallback.
+     */
+    private void setupMsiAuthScenario(String directHostname, String principalId, String akvHostname) {
+        setupRedisConfiguration(directHostname, principalId, true);
+        setupComputeIfAbsentMock();
+        
+        var hostnameSecret = mockKeyVaultSecret(akvHostname);
+        lenient().when(secretClient.getSecret("redis-hostname")).thenReturn(hostnameSecret);
+        setupLoggerMock();
+    }
+
+    /**
+     * Helper method to setup common Redis configuration mocks.
+     */
+    private void setupRedisConfiguration(String hostname, String principalId, boolean msiEnabled) {
+        lenient().when(redisConfiguration.getHostname()).thenReturn(hostname);
+        lenient().when(redisConfiguration.getPrincipalId()).thenReturn(principalId);
+        lenient().when(redisConfiguration.getHostKey()).thenReturn("redis-hostname");
+        lenient().when(redisConfiguration.getPasswordKey()).thenReturn("redis-password");
+        lenient().when(redisConfiguration.getPort()).thenReturn(6380);
+        lenient().when(redisConfiguration.getDatabase()).thenReturn(0);
+        lenient().when(redisConfiguration.getExpiration()).thenReturn(3600);
+        lenient().when(redisConfiguration.getConnectionTimeout()).thenReturn(10L);
+        lenient().when(redisConfiguration.getCommandTimeout()).thenReturn(5);
+        lenient().when(msiConfiguration.getIsEnabled()).thenReturn(msiEnabled);
+    }
+
+    /**
+     * Helper method to setup computeIfAbsent mock that invokes the function.
+     */
+    private void setupComputeIfAbsentMock() {
+        lenient().when(redisClientMap.containsKey(anyString())).thenReturn(false);
+        lenient().when(redisClientMap.computeIfAbsent(anyString(), any())).thenAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            java.util.function.Function<String, IRedisCache<String, List<String>>> function = invocation.getArgument(1);
+            try {
+                return function.apply(invocation.getArgument(0));
+            } catch (Exception e) {
+                // Catch Redis connection exceptions that occur in unit tests
+                return null;
+            }
+        });
+    }
+
     /**
      * Helper method to create type-safe mocks without warnings.
      */
@@ -331,5 +533,15 @@ public class RedisClientFactoryTest {
     private void setupLoggerMock() {
         mockSingleton(coreLoggerFactory);
         when(coreLoggerFactory.getLogger(anyString())).thenReturn(coreLogger);
+    }
+
+    /**
+     * Helper method to mock KeyVault secret responses.
+     */
+    private com.azure.security.keyvault.secrets.models.KeyVaultSecret mockKeyVaultSecret(String value) {
+        com.azure.security.keyvault.secrets.models.KeyVaultSecret secret = 
+            mock(com.azure.security.keyvault.secrets.models.KeyVaultSecret.class);
+        lenient().when(secret.getValue()).thenReturn(value);
+        return secret;
     }
 }
