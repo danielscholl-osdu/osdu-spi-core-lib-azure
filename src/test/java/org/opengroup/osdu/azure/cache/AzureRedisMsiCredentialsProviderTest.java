@@ -125,8 +125,8 @@ public class AzureRedisMsiCredentialsProviderTest {
             return true;
         }));
 
-        // Assert - verify logging with token expiry
-        verify(coreLogger).info(argThat((String msg) -> 
+        // Assert - verify logging with token expiry (debug level to avoid noise during reconnect storms)
+        verify(coreLogger).debug(argThat((String msg) -> 
             msg.contains("AzureRedisMsiCredentialsProvider providing fresh credentials") &&
             msg.contains("Token expires at")
         ), eq(expiryTime));
@@ -169,6 +169,22 @@ public class AzureRedisMsiCredentialsProviderTest {
             .thenReturn(Mono.error(new RuntimeException("Azure credential error")));
 
         // Act & Assert
+        RuntimeException exception = assertThrows(RuntimeException.class, () -> {
+            provider.resolveCredentials().block();
+        });
+
+        assertEquals("Failed to resolve MSI credentials", exception.getMessage());
+        verify(coreLogger).error(eq("AzureRedisMsiCredentialsProvider error resolving credentials"), any(Exception.class));
+    }
+
+    @Test
+    public void should_wrap_imds_timeout_error_and_fail_gracefully() {
+        // Arrange — simulate what Reactor's .timeout() propagates: RuntimeException wrapping TimeoutException
+        RuntimeException timeoutError = new RuntimeException(
+            new java.util.concurrent.TimeoutException("IMDS did not respond within 10s"));
+        when(mockCredential.getToken(any(TokenRequestContext.class))).thenReturn(Mono.error(timeoutError));
+
+        // Act & Assert — should propagate as "Failed to resolve MSI credentials"
         RuntimeException exception = assertThrows(RuntimeException.class, () -> {
             provider.resolveCredentials().block();
         });

@@ -24,6 +24,9 @@ import io.lettuce.core.RedisCredentialsProvider;
 import org.opengroup.osdu.azure.logging.CoreLoggerFactory;
 import org.opengroup.osdu.azure.logging.ICoreLogger;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
+
+import java.time.Duration;
 
 /**
  * Azure Redis credentials provider for MSI (Managed Service Identity) authentication with Lettuce.
@@ -39,11 +42,21 @@ import reactor.core.publisher.Mono;
  *   <li>Automatic token refresh on AUTH failures (no scheduled refresh needed)</li>
  *   <li>Thread-safe token acquisition using Azure DefaultAzureCredential</li>
  *   <li>Reactive programming model using Project Reactor's Mono</li>
+ *   <li>Blocking IMDS call offloaded to boundedElastic scheduler to protect Lettuce's Netty I/O threads</li>
+ *   <li>10-second timeout on IMDS calls to prevent indefinite blocking under throttling</li>
  * </ul>
+ *
+ * <p>Note: token caching is handled internally by {@code DefaultAzureCredential} via MSAL4J's
+ * {@code ManagedIdentityApplication.acquireTokenForManagedIdentity()}, which maintains a
+ * thread-safe {@code TokenCache} and only calls IMDS when the cached token is within
+ * its refresh buffer (~2 minutes before expiry). No additional caching layer is needed here.</p>
  */
 public class AzureRedisMsiCredentialsProvider implements RedisCredentialsProvider {
     private static final String LOGGER_NAME = AzureRedisMsiCredentialsProvider.class.getName();
     private static final String AZURE_REDIS_SCOPE = "https://redis.azure.com/.default";
+
+    /** Maximum time to wait for a token from IMDS before giving up. */
+    private static final Duration IMDS_TIMEOUT = Duration.ofSeconds(10);
 
     private final String principalId;
     private final DefaultAzureCredential credential;
@@ -60,8 +73,13 @@ public class AzureRedisMsiCredentialsProvider implements RedisCredentialsProvide
     }
 
     /**
-     * Resolves Redis credentials by obtaining a fresh MSI token from Azure.
-     * Called automatically by Lettuce when authentication is needed or when AUTH errors occur.
+     * Resolves Redis credentials by obtaining an MSI token from Azure.
+     * {@code DefaultAzureCredential} (via MSAL4J) handles token caching internally —
+     * it only calls IMDS when the cached token is near expiry.
+     *
+     * <p>The blocking IMDS call is offloaded to {@code Schedulers.boundedElastic()} so it
+     * never runs on a Lettuce Netty I/O thread, which would freeze all connections on that
+     * event loop. A 10-second timeout guards against IMDS being unresponsive under load.</p>
      *
      * @return Mono containing RedisCredentials with username (Principal ID) and password (access token)
      */
@@ -71,26 +89,25 @@ public class AzureRedisMsiCredentialsProvider implements RedisCredentialsProvide
             final ICoreLogger logger = CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME);
 
             try {
-                // Get fresh MSI token from Azure
                 TokenRequestContext tokenRequestContext = new TokenRequestContext();
                 tokenRequestContext.addScopes(AZURE_REDIS_SCOPE);
 
-                AccessToken accessToken = credential.getToken(tokenRequestContext).block();
+                AccessToken accessToken = credential.getToken(tokenRequestContext)
+                        .block(IMDS_TIMEOUT);
+
                 if (accessToken == null || accessToken.getToken() == null) {
                     logger.error("Failed to acquire access token from MSI");
                     throw new RuntimeException("Failed to acquire access token from MSI");
                 }
 
-                String token = accessToken.getToken();
+                logger.debug("AzureRedisMsiCredentialsProvider providing fresh credentials. Token expires at: {}", accessToken.getExpiresAt());
 
-                logger.info("AzureRedisMsiCredentialsProvider providing fresh credentials. Token expires at: {}", accessToken.getExpiresAt());
-
-                return RedisCredentials.just(principalId, token);
+                return RedisCredentials.just(principalId, accessToken.getToken());
 
             } catch (Exception e) {
                 logger.error("AzureRedisMsiCredentialsProvider error resolving credentials", e);
                 throw new RuntimeException("Failed to resolve MSI credentials", e);
             }
-        });
+        }).subscribeOn(Schedulers.boundedElastic()); // CRITICAL: offload blocking IMDS call from Lettuce's Netty I/O thread
     }
 }
