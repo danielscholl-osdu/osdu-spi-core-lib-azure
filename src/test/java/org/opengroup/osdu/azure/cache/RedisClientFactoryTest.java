@@ -38,9 +38,12 @@ import org.opengroup.osdu.core.common.cache.RedisCache;
 import org.redisson.api.RedissonClient;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import reactor.core.publisher.Mono;
 
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -51,6 +54,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
@@ -543,5 +547,80 @@ public class RedisClientFactoryTest {
             mock(com.azure.security.keyvault.secrets.models.KeyVaultSecret.class);
         lenient().when(secret.getValue()).thenReturn(value);
         return secret;
+    }
+
+    @Test
+    public void getTokenFromMsi_shouldReturnNull_andLogWarning_whenImdsTimesOut() throws Exception {
+        setupLoggerMock();
+        // Simulate a timeout thrown by Reactor's .timeout() — wraps java.util.concurrent.TimeoutException
+        when(defaultAzureCredential.getToken(any(TokenRequestContext.class)))
+            .thenReturn(Mono.error(new RuntimeException(
+                new java.util.concurrent.TimeoutException("IMDS did not respond within 10s"))));
+
+        Method method = RedisClientFactory.class.getDeclaredMethod("getTokenFromMsi");
+        method.setAccessible(true);
+        String token = (String) method.invoke(redisClientFactory);
+
+        assertNull(token);
+        verify(coreLogger).warn(eq("Failed to authenticate with MSI"), any(Exception.class));
+    }
+
+    @Test
+    public void redissonResolver_resolve_shouldReturnCredentials_whenTokenObtained() throws Exception {
+        setupLoggerMock();
+        String principalId = "principal-123";
+        String tokenValue = "test-msi-token";
+
+        com.azure.core.credential.AccessToken accessToken = new com.azure.core.credential.AccessToken(
+                tokenValue, java.time.OffsetDateTime.now().plusHours(1));
+        when(defaultAzureCredential.getToken(any(TokenRequestContext.class)))
+                .thenReturn(Mono.just(accessToken));
+
+        Class<?> resolverClass = java.util.Arrays.stream(RedisClientFactory.class.getDeclaredClasses())
+                .filter(c -> c.getSimpleName().equals("RedissonMsiCredentialsResolver"))
+                .findFirst().orElseThrow();
+        java.lang.reflect.Constructor<?> constructor = resolverClass.getDeclaredConstructor(RedisClientFactory.class, String.class);
+        constructor.setAccessible(true);
+        Object resolver = constructor.newInstance(redisClientFactory, principalId);
+
+        java.lang.reflect.Method resolveMethod = resolverClass.getDeclaredMethod("resolve", java.net.InetSocketAddress.class);
+        resolveMethod.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        java.util.concurrent.CompletionStage<org.redisson.config.Credentials> stage =
+                (java.util.concurrent.CompletionStage<org.redisson.config.Credentials>)
+                resolveMethod.invoke(resolver, new java.net.InetSocketAddress("redis.example.com", 6380));
+
+        org.redisson.config.Credentials credentials = stage.toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS);
+
+        assertNotNull(credentials);
+        assertEquals(principalId, credentials.getUsername());
+        assertEquals(tokenValue, credentials.getPassword());
+    }
+
+    @Test
+    public void redissonResolver_resolve_shouldCompleteExceptionally_whenTokenIsNull() throws Exception {
+        setupLoggerMock();
+        // IMDS returns an error (null token path via failed Mono)
+        when(defaultAzureCredential.getToken(any(TokenRequestContext.class)))
+                .thenReturn(Mono.error(new RuntimeException("IMDS unavailable")));
+
+        Class<?> resolverClass = java.util.Arrays.stream(RedisClientFactory.class.getDeclaredClasses())
+                .filter(c -> c.getSimpleName().equals("RedissonMsiCredentialsResolver"))
+                .findFirst().orElseThrow();
+        java.lang.reflect.Constructor<?> constructor = resolverClass.getDeclaredConstructor(RedisClientFactory.class, String.class);
+        constructor.setAccessible(true);
+        Object resolver = constructor.newInstance(redisClientFactory, "principal-123");
+
+        java.lang.reflect.Method resolveMethod = resolverClass.getDeclaredMethod("resolve", java.net.InetSocketAddress.class);
+        resolveMethod.setAccessible(true);
+
+        @SuppressWarnings("unchecked")
+        java.util.concurrent.CompletionStage<org.redisson.config.Credentials> stage =
+                (java.util.concurrent.CompletionStage<org.redisson.config.Credentials>)
+                resolveMethod.invoke(resolver, new java.net.InetSocketAddress("redis.example.com", 6380));
+
+        assertThrows(java.util.concurrent.ExecutionException.class,
+                () -> stage.toCompletableFuture().get(5, java.util.concurrent.TimeUnit.SECONDS));
     }
 }

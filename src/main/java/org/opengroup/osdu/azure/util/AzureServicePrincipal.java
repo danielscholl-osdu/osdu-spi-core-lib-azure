@@ -14,17 +14,26 @@
 
 package org.opengroup.osdu.azure.util;
 
+import org.opengroup.osdu.core.common.model.http.AppException;
+import org.springframework.stereotype.Component;
+
 import com.azure.core.credential.AccessToken;
 import com.azure.core.credential.TokenRequestContext;
+import com.azure.identity.AzureCliCredential;
+import com.azure.identity.AzureCliCredentialBuilder;
+import com.azure.identity.ChainedTokenCredential;
+import com.azure.identity.ChainedTokenCredentialBuilder;
 import com.azure.identity.ClientSecretCredential;
 import com.azure.identity.ClientSecretCredentialBuilder;
+import com.azure.identity.IntelliJCredential;
+import com.azure.identity.IntelliJCredentialBuilder;
 import com.azure.identity.ManagedIdentityCredential;
 import com.azure.identity.ManagedIdentityCredentialBuilder;
 import com.azure.identity.WorkloadIdentityCredential;
 import com.azure.identity.WorkloadIdentityCredentialBuilder;
 
-import org.opengroup.osdu.core.common.model.http.AppException;
-import org.springframework.stereotype.Component;
+import java.time.Duration;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Class to generate the AAD authentication tokens using WorkloadIdentityCredential.
@@ -43,6 +52,12 @@ public final class AzureServicePrincipal {
     private static final String ERROR_MESSAGE_MSI = "MSI client returned null token";
     private static final String ERROR_MESSAGE_WI = "Workload Identity client returned null token";
     private static final String MANAGEMENT_SCOPE = "https://management.azure.com/.default";
+
+    /** Maximum time to wait for a token from IMDS before giving up. */
+    private static final Duration IMDS_TIMEOUT = Duration.ofSeconds(10);
+
+    /** Maximum time to wait for a token from Azure AD before giving up. */
+    private static final Duration AZURE_AD_TIMEOUT = Duration.ofSeconds(30);
 
 
     /**
@@ -76,46 +91,52 @@ public final class AzureServicePrincipal {
      */
     public String getIdToken(final String sp_id, final String sp_secret, final String tenant_id, final String app_resource_id) {
         try {
-            ClientSecretCredential credential = new ClientSecretCredentialBuilder()
+            ClientSecretCredentialBuilder credentialBuilder = createClientSecretCredentialBuilder();
+            ClientSecretCredential credential = credentialBuilder
+                    .tenantId(tenant_id)
                     .clientId(sp_id)
                     .clientSecret(sp_secret)
-                    .tenantId(tenant_id)
                     .build();
 
-            TokenRequestContext requestContextSPN = new TokenRequestContext();
-            requestContextSPN.addScopes(app_resource_id.concat("/.default"));
-            AccessToken tokenSpnCreds = credential.getToken(requestContextSPN).block();
+            String sanitizedResourceId = sanitizeResourceId(app_resource_id);
 
-            if (tokenSpnCreds != null && tokenSpnCreds.getToken() != null) {
-                return tokenSpnCreds.getToken();
-            }
-            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON, ERROR_MESSAGE_SPN);
+            TokenRequestContext requestContextSPN = new TokenRequestContext();
+            requestContextSPN.addScopes(sanitizedResourceId.concat("/.default"));
+            AccessToken tokenSpnCreds = credential.getToken(requestContextSPN)
+                    .timeout(AZURE_AD_TIMEOUT)
+                    .block();
+
+            return extractTokenOrThrow(tokenSpnCreds, ERROR_MESSAGE_SPN);
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
-            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
-                "Service Principal token acquisition failed: " + e.getMessage());
+            throw handleTokenAcquisitionException(e, "Service Principal", AZURE_AD_TIMEOUT);
         }
     }
 
     /**
      * Gets a token using Managed Identity Credential with custom scope.
+     * A 10-second timeout guards against IMDS throttling (e.g., many pods refreshing
+     * simultaneously), which would otherwise cause indefinite blocking.
      * @param scope The scope to request
      * @return The authentication token string
      */
     public String getMSIToken(final String scope) {
         try {
-            ManagedIdentityCredential credential = createManagedIdentityCredentialBuilder().build();
+            ManagedIdentityCredentialBuilder credentialBuilder = createManagedIdentityCredentialBuilder();
+            ManagedIdentityCredential credential = credentialBuilder.build();
 
             TokenRequestContext requestContextMSI = new TokenRequestContext();
             requestContextMSI.addScopes(scope);
-            AccessToken tokenMsi = credential.getToken(requestContextMSI).block();
+            AccessToken tokenMsi = credential.getToken(requestContextMSI)
+                    .timeout(IMDS_TIMEOUT)
+                    .block();
 
-            if (tokenMsi != null && tokenMsi.getToken() != null) {
-                return tokenMsi.getToken();
-            }
-            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON, ERROR_MESSAGE_MSI);
+            return extractTokenOrThrow(tokenMsi, ERROR_MESSAGE_MSI);
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
-            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
-                "MSI token acquisition failed: " + e.getMessage());
+            throw handleTokenAcquisitionException(e, "MSI", IMDS_TIMEOUT);
         }
     }
 
@@ -138,18 +159,23 @@ public final class AzureServicePrincipal {
             WorkloadIdentityCredentialBuilder workloadIdentityClientBuilder = createworkloadIdentityClientBuilder();
             WorkloadIdentityCredential credential = workloadIdentityClientBuilder.build();
 
+            String sanitizedResourceId = sanitizeResourceId(app_resource_id);
+
             TokenRequestContext requestContext = new TokenRequestContext();
             requestContext.addScopes(scope);
-            requestContext.addScopes(app_resource_id.concat("/.default"));
-            AccessToken token = credential.getToken(requestContext).block();
-
-            if (token != null && token.getToken() != null) {
-                return token.getToken();
+            String resourceScope = sanitizedResourceId.concat("/.default");
+            if (!resourceScope.equals(scope)) {
+                requestContext.addScopes(resourceScope);
             }
-            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON, ERROR_MESSAGE_WI);
+            AccessToken token = credential.getToken(requestContext)
+                    .timeout(AZURE_AD_TIMEOUT)
+                    .block();
+
+            return extractTokenOrThrow(token, ERROR_MESSAGE_WI);
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
-            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
-                "Workload Identity token acquisition failed: " + e.getMessage());
+            throw handleTokenAcquisitionException(e, "Workload Identity", AZURE_AD_TIMEOUT);
         }
     }
 
@@ -163,13 +189,52 @@ public final class AzureServicePrincipal {
     }
 
     /**
-     * Creates a new WorkloadIdentityClientBuilder instance.
+     * Gets an authentication token using local development credentials with custom scope.
+     *
+     * <p><strong>Note:</strong> This method is intended for local development only and is NOT part
+     * of the production runtime authentication flow. For production deployments, use Managed Identity
+     * ({@link #getMSIToken(String)}) or Workload Identity ({@link #getWIToken(String, String)}).</p>
+     *
+     * <p>This method uses a chained credential approach, attempting AzureCliCredential and
+     * IntelliJCredential in sequence to authenticate during local development.</p>
+     *
+     * @param scope The scope to request
+     * @return The authentication token string
+     * @throws AppException if token acquisition fails or returns null
+     */
+    public String getLocalDevToken(final String scope) {
+        try {
+            ChainedTokenCredentialBuilder credentialBuilder = this.createLocalChainedTokenCredentialBuilder();
+            ChainedTokenCredential chainedCredential = credentialBuilder.build();
+
+            TokenRequestContext requestContext = new TokenRequestContext();
+            requestContext.addScopes(scope);
+
+            AccessToken token = chainedCredential.getToken(requestContext).block();
+
+            return extractTokenOrThrow(token, "Local development credential returned null token");
+        } catch (Exception e) {
+            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
+                "Local development token acquisition failed: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Creates a ChainedTokenCredentialBuilder for local development.
      * Protected method to allow mocking in tests.
      *
-     * @return A new instance of WorkloadIdentityClientBuilder
+     * @return A ChainedTokenCredentialBuilder instance
      */
-    protected WorkloadIdentityCredentialBuilder createworkloadIdentityClientBuilder() {
-        return new WorkloadIdentityCredentialBuilder();
+    protected ChainedTokenCredentialBuilder createLocalChainedTokenCredentialBuilder() {
+        ChainedTokenCredentialBuilder credentialBuilder = new ChainedTokenCredentialBuilder();
+
+        AzureCliCredential azureCliCredential = new AzureCliCredentialBuilder().build();
+        credentialBuilder.addLast(azureCliCredential);
+
+        IntelliJCredential intelliJCredential = new IntelliJCredentialBuilder().build();
+        credentialBuilder.addLast(intelliJCredential);
+
+        return credentialBuilder;
     }
 
     /**
@@ -180,5 +245,94 @@ public final class AzureServicePrincipal {
      */
     protected ManagedIdentityCredentialBuilder createManagedIdentityCredentialBuilder() {
         return new ManagedIdentityCredentialBuilder();
+    }
+
+    /**
+     * Creates a new ClientSecretCredentialBuilder instance.
+     * Protected method to allow mocking in tests.
+     *
+     * @return A new instance of ClientSecretCredentialBuilder
+     */
+    protected ClientSecretCredentialBuilder createClientSecretCredentialBuilder() {
+        return new ClientSecretCredentialBuilder();
+    }
+
+    /**
+     * Creates a new WorkloadIdentityClientBuilder instance.
+     * Protected method to allow mocking in tests.
+     *
+     * @return A new instance of WorkloadIdentityClientBuilder
+     */
+    protected WorkloadIdentityCredentialBuilder createworkloadIdentityClientBuilder() {
+        return new WorkloadIdentityCredentialBuilder();
+    }
+
+    /**
+     * Sanitizes a resource ID by removing trailing slashes to avoid scope formatting issues.
+     *
+     * @param resourceId The resource ID to sanitize
+     * @return The sanitized resource ID without trailing slash
+     */
+    private String sanitizeResourceId(final String resourceId) {
+        return resourceId.endsWith("/")
+            ? resourceId.substring(0, resourceId.length() - 1)
+            : resourceId;
+    }
+
+    /**
+     * Extracts the token string from an AccessToken or throws an AppException if the token is null.
+     *
+     * @param accessToken The AccessToken to extract from
+     * @param errorMessage The error message to use if the token is null
+     * @return The token string
+     * @throws AppException if the token is null or empty
+     */
+    private String extractTokenOrThrow(final AccessToken accessToken, final String errorMessage) {
+        if (accessToken != null && accessToken.getToken() != null) {
+            return accessToken.getToken();
+        }
+        throw new AppException(ERROR_STATUS_CODE, ERROR_REASON, errorMessage);
+    }
+
+    /**
+     * Walks the exception cause chain to find the root cause.
+     *
+     * @param exception The exception to analyze
+     * @return The root cause of the exception
+     */
+    private Throwable getRootCause(final Throwable exception) {
+        Throwable rootCause = exception;
+        while (rootCause.getCause() != null) {
+            rootCause = rootCause.getCause();
+        }
+        return rootCause;
+    }
+
+    /**
+     * Handles exceptions from token acquisition operations, detecting timeouts and wrapping in AppException.
+     * Reactor's block() wraps checked exceptions via Exceptions.propagate(), so this walks the full
+     * cause chain to reliably detect TimeoutException at any nesting depth.
+     *
+     * @param exception The exception to handle
+     * @param credentialType The type of credential (e.g., "MSI", "Service Principal")
+     * @param timeout The timeout duration that was applied
+     * @return An AppException with appropriate error message
+     */
+    private AppException handleTokenAcquisitionException(final Exception exception, final String credentialType, final Duration timeout) {
+        Throwable rootCause = getRootCause(exception);
+        String exceptionMessage = exception.getMessage();
+        String appExceptionMessage;
+
+        if (rootCause instanceof TimeoutException) {
+            String message = credentialType + " token acquisition timed out after " + timeout.getSeconds() + "s";
+            if ("MSI".equals(credentialType)) {
+                message += " — IMDS may be throttled";
+            }
+            appExceptionMessage = message + ": " + exceptionMessage;
+        } else {
+            appExceptionMessage = credentialType + " token acquisition failed: " + exceptionMessage;
+        }
+
+        return new AppException(ERROR_STATUS_CODE, ERROR_REASON, appExceptionMessage);
     }
 }
