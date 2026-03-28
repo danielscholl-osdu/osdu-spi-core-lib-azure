@@ -145,6 +145,20 @@ public class AuthUtilsTest {
     }
 
     @Test
+    void isAadTokenReturnsTrue_when_issuerIsStsWindows() {
+        // JWT payload contains iss=https://sts.windows.net/
+        String stsToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJpc3MiOiJodHRwczovL3N0cy53aW5kb3dzLm5ldC8ifQ.signature";
+        assertTrue(authUtils.isAadToken(stsToken));
+    }
+
+    @Test
+    void isAadTokenReturnsTrue_when_issuerIsStsChinaCloud() {
+        // JWT payload contains iss=https://sts.chinacloudapi.cn/
+        String chinaToken = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyLCJpc3MiOiJodHRwczovL3N0cy5jaGluYWNsb3VkYXBpLmNuLyJ9.signature";
+        assertTrue(authUtils.isAadToken(chinaToken));
+    }
+
+    @Test
     void isAadTokenReturnsFalse_when_issuerIsNotAAD() {
         assertFalse(authUtils.isAadToken(JWT_TOKEN_WITH_NON_AAD_ISSUER));
     }

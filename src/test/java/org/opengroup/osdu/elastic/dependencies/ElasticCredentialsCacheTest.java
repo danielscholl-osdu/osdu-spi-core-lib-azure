@@ -41,6 +41,22 @@ class ElasticCredentialsCacheTest {
     }
 
     @Test
+    void containsKey_returnsFalse_whenKeyNotPresent() {
+        assertEquals(false, cache.containsKey("nonexistent"));
+    }
+
+    @Test
+    void containsKey_returnsTrue_whenKeyPresent() {
+        cache.put("key", ClusterSettings.builder().build());
+        assertEquals(true, cache.containsKey("key"));
+    }
+
+    @Test
+    void getCacheKey_formatsCorrectly() {
+        assertEquals("my-partition-clusterSettings", cache.getCacheKey("my-partition"));
+    }
+
+    @Test
     void put_thenClear_works() {
         ClusterSettings s = ClusterSettings.builder().build();
         cache.put("key-1", s);

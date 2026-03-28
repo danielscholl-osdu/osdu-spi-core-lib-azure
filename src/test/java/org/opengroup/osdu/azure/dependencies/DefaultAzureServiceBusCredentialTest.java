@@ -25,6 +25,7 @@ import reactor.core.publisher.Mono;
 
 import java.time.OffsetDateTime;
 
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.verify;
@@ -38,6 +39,12 @@ class DefaultAzureServiceBusCredentialTest {
 
     @InjectMocks
     private DefaultAzureServiceBusCredential sbCredential;
+
+    @Test
+    void defaultConstructor_shouldCreateInstance() {
+        DefaultAzureServiceBusCredential credential = new DefaultAzureServiceBusCredential();
+        assertNotNull(credential);
+    }
 
     @Test
     void token_shouldBeCached() {

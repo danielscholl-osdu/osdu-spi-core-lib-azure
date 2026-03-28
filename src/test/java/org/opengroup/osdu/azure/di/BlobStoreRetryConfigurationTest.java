@@ -135,4 +135,20 @@ public class BlobStoreRetryConfigurationTest {
         assertEquals(requestRetryOptions.getMaxRetryDelay(), Duration.ofMillis(maxRetryDelayValue));
     }
 
+    @Test
+    public void should_set_retryPolicyType_to_fixed() {
+        blobStoreRetryConfiguration.setRetryPolicyTypeValue("FIXED");
+        RequestRetryOptions requestRetryOptions = blobStoreRetryConfiguration.getRequestRetryOptions();
+
+        assertEquals(requestRetryOptions.getMaxTries(), defaultRequestRetryOptions.getMaxTries());
+    }
+
+    @Test
+    public void should_default_to_exponential_for_invalid_retryPolicyType() {
+        blobStoreRetryConfiguration.setRetryPolicyTypeValue("INVALID_VALUE");
+        RequestRetryOptions requestRetryOptions = blobStoreRetryConfiguration.getRequestRetryOptions();
+
+        assertEquals(requestRetryOptions.getMaxTries(), defaultRequestRetryOptions.getMaxTries());
+    }
+
 }
