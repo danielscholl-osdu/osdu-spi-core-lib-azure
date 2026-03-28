@@ -117,6 +117,15 @@
           <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
           <version>${springdoc-openapi-starter-webmvc-ui.version}</version>
       </dependency>
+      <!-- Log4j override: Spring Boot 3.5.9 provides 2.24.3, we need 2.25.3 for CVE-2025-68161 -->
+      <!-- Remove this override when Spring Boot BOM updates to Log4j >= 2.25.3 -->
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-bom</artifactId>
+        <version>2.25.3</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-dependencies</artifactId>
@@ -152,6 +161,26 @@
           <groupId>io.lettuce</groupId>
           <artifactId>lettuce-core</artifactId>
           <version>6.8.1.RELEASE</version>
+      </dependency>
+      <!--
+        OkHttp 3.x override: azure-mgmt-eventgrid chain brings 3.12.2 which has known CVEs.
+        Upgrade to latest 3.x (3.14.9). Cannot go to 4.x due to API changes in legacy chain.
+        Remove when azure-mgmt-eventgrid dependency is migrated.
+      -->
+      <dependency>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>okhttp</artifactId>
+        <version>3.14.9</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>logging-interceptor</artifactId>
+        <version>3.14.9</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>okhttp-urlconnection</artifactId>
+        <version>3.14.9</version>
       </dependency>
       <!--
         reactor-netty-http Fix CVE-2025-22227

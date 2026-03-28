@@ -22,6 +22,8 @@ import org.opengroup.osdu.core.common.model.http.AppException;
 
 import com.azure.core.credential.AccessToken;
 import com.azure.core.credential.TokenRequestContext;
+import com.azure.identity.ChainedTokenCredential;
+import com.azure.identity.ChainedTokenCredentialBuilder;
 import com.azure.identity.ClientSecretCredential;
 import com.azure.identity.ClientSecretCredentialBuilder;
 import com.azure.identity.ManagedIdentityCredential;
@@ -66,6 +68,12 @@ public class AzureServicePrincipalTest {
 
     @Mock
     WorkloadIdentityCredential workloadIdentityCredential;
+
+    @Mock
+    ChainedTokenCredentialBuilder chainedTokenCredentialBuilder;
+
+    @Mock
+    ChainedTokenCredential chainedTokenCredential;
 
     @Test
     public void TestGenerateIDToken() throws Exception {
@@ -225,6 +233,104 @@ public class AzureServicePrincipalTest {
         assertEquals("https://management.azure.com/.default", capturedRequest.getScopes().get(0));
     }
 
+    // --- getLocalDevToken tests ---
+
+    @Test
+    public void TestGenerateLocalDevToken() throws Exception {
+        setupChainedTokenCredentialMocks();
+        when(chainedTokenCredential.getToken(any(TokenRequestContext.class))).thenReturn(Mono.just(createAccessToken()));
+
+        String result = azureServicePrincipal.getLocalDevToken("https://management.azure.com/.default");
+        assertEquals(accessTokenContent, result);
+
+        verify(chainedTokenCredentialBuilder, times(1)).build();
+        verify(chainedTokenCredential, times(1)).getToken(any(TokenRequestContext.class));
+    }
+
+    @Test
+    public void TestGenerateLocalDevToken_failure_nullToken() throws Exception {
+        setupChainedTokenCredentialMocks();
+        when(chainedTokenCredential.getToken(any(TokenRequestContext.class))).thenReturn(Mono.empty());
+
+        assertThrows(AppException.class, () -> azureServicePrincipal.getLocalDevToken("https://management.azure.com/.default"));
+
+        verify(chainedTokenCredentialBuilder, times(1)).build();
+    }
+
+    @Test
+    public void TestGenerateLocalDevToken_failure_exception() throws Exception {
+        setupChainedTokenCredentialMocks();
+        when(chainedTokenCredential.getToken(any(TokenRequestContext.class)))
+            .thenReturn(Mono.error(new RuntimeException("Azure CLI not logged in")));
+
+        AppException ex = assertThrows(AppException.class, () ->
+            azureServicePrincipal.getLocalDevToken("https://management.azure.com/.default"));
+
+        assertTrue(ex.getMessage().contains("Local development token acquisition failed"));
+    }
+
+    // --- Timeout tests for SPN and WI ---
+
+    @Test
+    public void TestGenerateIdToken_timeout_throwsAppException() throws Exception {
+        setupClientSecretCredentialMocks();
+        when(clientSecretCredential.getToken(any(TokenRequestContext.class)))
+            .thenReturn(Mono.error(new RuntimeException(new java.util.concurrent.TimeoutException("Azure AD timeout after 30s"))));
+
+        AppException ex = assertThrows(AppException.class, () ->
+            azureServicePrincipal.getIdToken(spId, spSecret, tenantId, appResourceId));
+
+        assertNotNull(ex.getMessage());
+        assertTrue(ex.getMessage().contains("timed out"),
+            "Expected AppException to mention timeout but got: " + ex.getMessage());
+        // SPN timeout should NOT mention IMDS throttling
+        assertTrue(!ex.getMessage().contains("IMDS"),
+            "SPN timeout should not mention IMDS but got: " + ex.getMessage());
+    }
+
+    @Test
+    public void TestGenerateWIToken_timeout_throwsAppException() throws Exception {
+        setupWorkloadIdentityCredentialMocks();
+        when(workloadIdentityCredential.getToken(any(TokenRequestContext.class)))
+            .thenReturn(Mono.error(new RuntimeException(new java.util.concurrent.TimeoutException("Azure AD timeout after 30s"))));
+
+        AppException ex = assertThrows(AppException.class, () ->
+            azureServicePrincipal.getWIToken(appResourceId));
+
+        assertNotNull(ex.getMessage());
+        assertTrue(ex.getMessage().contains("timed out"),
+            "Expected AppException to mention timeout but got: " + ex.getMessage());
+    }
+
+    @Test
+    public void TestGenerateIdToken_genericException_throwsAppException() throws Exception {
+        setupClientSecretCredentialMocks();
+        when(clientSecretCredential.getToken(any(TokenRequestContext.class)))
+            .thenReturn(Mono.error(new RuntimeException("Network unreachable")));
+
+        AppException ex = assertThrows(AppException.class, () ->
+            azureServicePrincipal.getIdToken(spId, spSecret, tenantId, appResourceId));
+
+        assertTrue(ex.getMessage().contains("failed"),
+            "Expected failure message but got: " + ex.getMessage());
+    }
+
+    @Test
+    public void TestGenerateMsiToken_customScope() throws Exception {
+        String customScope = "https://redis.azure.com/.default";
+        ArgumentCaptor<TokenRequestContext> requestCaptor = ArgumentCaptor.forClass(TokenRequestContext.class);
+        AccessToken token = new AccessToken(accessTokenContent, OffsetDateTime.now().plusHours(1));
+
+        setupManagedIdentityCredentialMocks();
+        when(managedIdentityCredential.getToken(requestCaptor.capture())).thenReturn(Mono.just(token));
+
+        String result = azureServicePrincipal.getMSIToken(customScope);
+        assertEquals(accessTokenContent, result);
+
+        TokenRequestContext capturedRequest = requestCaptor.getValue();
+        assertEquals(customScope, capturedRequest.getScopes().get(0));
+    }
+
     /**
      *  This test is added for end to verification whether tokens are getting generated.
      */
@@ -260,6 +366,11 @@ public class AzureServicePrincipalTest {
     private void setupWorkloadIdentityCredentialMocks() {
         when(azureServicePrincipal.createworkloadIdentityClientBuilder()).thenReturn(workloadIdentityCredentialBuilder);
         when(workloadIdentityCredentialBuilder.build()).thenReturn(workloadIdentityCredential);
+    }
+
+    private void setupChainedTokenCredentialMocks() {
+        when(azureServicePrincipal.createLocalChainedTokenCredentialBuilder()).thenReturn(chainedTokenCredentialBuilder);
+        when(chainedTokenCredentialBuilder.build()).thenReturn(chainedTokenCredential);
     }
 
     private void mockSuccessfulTokenResponse(AccessToken token) {
