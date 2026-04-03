@@ -48,10 +48,12 @@ import static java.util.Collections.emptyList;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -319,6 +321,68 @@ public class DataLakeStoreTest {
 
         assertEquals(HttpStatus.INTERNAL_SERVER_ERROR.value(), ex.getError().getCode());
         assertEquals(errorMessage, ex.getError().getReason());
+    }
+
+    @Test
+    public void getFilePathsFromDirectory_success() {
+        PathItem pathItem1 = createPathItem("file1.txt");
+        PathItem pathItem2 = createPathItem("file2.txt");
+        PagedIterable<PathItem> pathItems = mock(PagedIterable.class);
+        Iterator<PathItem> pathItemIterator = mock(Iterator.class);
+
+        when(pathItems.iterator()).thenReturn(pathItemIterator);
+        when(pathItemIterator.hasNext()).thenReturn(true).thenReturn(true).thenReturn(false);
+        when(pathItemIterator.next()).thenReturn(pathItem1).thenReturn(pathItem2);
+        when(dataLakeDirectoryClient.listPaths(true, false, null, null)).thenReturn(pathItems);
+
+        List<String> filePaths = dataLakeStore.getFilePathsFromDirectory(PARTITION_ID, FILE_SYSTEM_NAME, DIRECTORY_NAME);
+
+        assertEquals(Arrays.asList(DIRECTORY_NAME + "/file1.txt", DIRECTORY_NAME + "/file2.txt"), filePaths);
+    }
+
+    @Test
+    public void getFilePathsFromDirectory_emptyDirectory() {
+        PagedIterable<PathItem> pathItems = mock(PagedIterable.class);
+        Iterator<PathItem> pathItemIterator = mock(Iterator.class);
+
+        when(pathItems.iterator()).thenReturn(pathItemIterator);
+        when(pathItemIterator.hasNext()).thenReturn(false);
+        when(dataLakeDirectoryClient.listPaths(true, false, null, null)).thenReturn(pathItems);
+
+        List<String> filePaths = dataLakeStore.getFilePathsFromDirectory(PARTITION_ID, FILE_SYSTEM_NAME, DIRECTORY_NAME);
+
+        assertEquals(emptyList(), filePaths);
+    }
+
+    @Test
+    public void getFilePathsFromDirectory_throwsOnError() {
+        DataLakeStorageException dataLakeStorageException = new DataLakeStorageException("Not found", httpResponse, "PathNotFound");
+        doThrow(dataLakeStorageException).when(dataLakeDirectoryClient).listPaths(true, false, null, null);
+        when(httpResponse.getStatusCode()).thenReturn(HttpStatus.NOT_FOUND.value());
+
+        AppException ex = assertThrows(AppException.class,
+                () -> dataLakeStore.getFilePathsFromDirectory(PARTITION_ID, FILE_SYSTEM_NAME, DIRECTORY_NAME));
+
+        assertEquals(HttpStatus.NOT_FOUND.value(), ex.getError().getCode());
+    }
+
+    @Test
+    public void deleteDirectory_success() {
+        dataLakeStore.deleteDirectory(PARTITION_ID, FILE_SYSTEM_NAME, DIRECTORY_NAME);
+
+        verify(dataLakeDirectoryClient).deleteWithResponse(eq(true), any(), any(), any());
+    }
+
+    @Test
+    public void deleteDirectory_throwsOnError() {
+        DataLakeStorageException dataLakeStorageException = new DataLakeStorageException("Not found", httpResponse, "PathNotFound");
+        doThrow(dataLakeStorageException).when(dataLakeDirectoryClient).deleteWithResponse(eq(true), any(), any(), any());
+        when(httpResponse.getStatusCode()).thenReturn(HttpStatus.NOT_FOUND.value());
+
+        AppException ex = assertThrows(AppException.class,
+                () -> dataLakeStore.deleteDirectory(PARTITION_ID, FILE_SYSTEM_NAME, DIRECTORY_NAME));
+
+        assertEquals(HttpStatus.NOT_FOUND.value(), ex.getError().getCode());
     }
 
     private PathItem createPathItem(String fileName) {

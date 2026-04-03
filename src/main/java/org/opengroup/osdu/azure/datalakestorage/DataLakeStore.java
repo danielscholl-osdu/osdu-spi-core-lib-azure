@@ -15,6 +15,12 @@
 package org.opengroup.osdu.azure.datalakestorage;
 
 import com.azure.core.http.rest.PagedIterable;
+import com.azure.core.util.polling.SyncPoller;
+import com.azure.storage.blob.BlobContainerClient;
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.models.BlobCopyInfo;
+import com.azure.storage.blob.models.BlobStorageException;
+import com.azure.storage.blob.specialized.BlockBlobClient;
 import com.azure.storage.common.sas.SasProtocol;
 import com.azure.storage.file.datalake.DataLakeDirectoryClient;
 import com.azure.storage.file.datalake.DataLakeServiceClient;
@@ -175,7 +181,7 @@ public class DataLakeStore {
      * @param sourceContainerName sourceContainerName
      * @param directoryName directoryName
      * @param destinationContainerName destinationContainerName
-     * @return DataLakeDirectoryClient Direc
+     * @return DataLakeDirectoryClient Directory client for the moved directory
      */
     public DataLakeDirectoryClient moveDirectory(
             final String dataPartitionId,
@@ -184,6 +190,93 @@ public class DataLakeStore {
             final String destinationContainerName) {
         DataLakeDirectoryClient dataLakeDirectoryClient = createDataLakeDirectoryClient(dataPartitionId, directoryName, sourceContainerName);
         return dataLakeDirectoryClient.rename(destinationContainerName, directoryName);
+    }
+
+    /**
+     * Copy a single file from one file system to another on the same ADLS Gen2 account.
+     * Uses BlockBlobClient.beginCopy with the blob endpoint URL.
+     * The BlobServiceClient is built against the .blob.core.windows.net endpoint
+     * (converted from the DFS endpoint in DataLakeClientFactoryImpl).
+     * @param dataPartitionId dataPartitionId
+     * @param sourceFileSystem source file system name
+     * @param destFileSystem destination file system name
+     * @param filePath full path of the file relative to the file system root
+     */
+    public void copyFileBetweenFileSystems(
+            final String dataPartitionId,
+            final String sourceFileSystem,
+            final String destFileSystem,
+            final String filePath) {
+        BlobServiceClient blobServiceClient = dataLakeClientFactory.getBlobServiceClient(dataPartitionId);
+        BlobContainerClient sourceContainer = blobServiceClient.getBlobContainerClient(sourceFileSystem);
+        BlobContainerClient destContainer = blobServiceClient.getBlobContainerClient(destFileSystem);
+        BlockBlobClient sourceBlockBlob = sourceContainer.getBlobClient(filePath).getBlockBlobClient();
+        BlockBlobClient destBlockBlob = destContainer.getBlobClient(filePath).getBlockBlobClient();
+
+        String sourceUrl = sourceBlockBlob.getBlobUrl();
+
+        try {
+            SyncPoller<BlobCopyInfo, Void> poller = destBlockBlob.beginCopy(sourceUrl, Duration.ofSeconds(1));
+            poller.waitForCompletion();
+        } catch (BlobStorageException ex) {
+            throw handleDataLakeStoreException(ex.getStatusCode(),
+                    String.format("Error copying file '%s' from '%s' to '%s'.", filePath, sourceFileSystem, destFileSystem), ex);
+        } catch (RuntimeException ex) {
+            if (isWrappedTimeoutException(ex)) {
+                throw handleDataLakeStoreException(HttpStatus.SC_SERVICE_UNAVAILABLE,
+                        String.format("Copy of file '%s' from '%s' to '%s' failed due to a timeout exception. Retry after a short delay.",
+                                filePath, sourceFileSystem, destFileSystem), ex);
+            }
+            throw handleDataLakeStoreException(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    String.format("Copy of file '%s' from '%s' to '%s' failed due to an unexpected error.",
+                            filePath, sourceFileSystem, destFileSystem), ex);
+        }
+    }
+
+    /**
+     * Get the full file paths from a directory, relative to the file system root.
+     * Unlike getFileNamesFromDirectory which returns only file names, this returns
+     * the complete path (e.g. "dirName/subdir/file.txt") needed for blob-level operations.
+     * @param dataPartitionId dataPartitionId
+     * @param containerName containerName
+     * @param directoryName directoryName
+     * @return the list of full file paths (non-directory items only)
+     */
+    public List<String> getFilePathsFromDirectory(final String dataPartitionId, final String containerName, final String directoryName) {
+        DataLakeDirectoryClient dataLakeDirectoryClient = createDataLakeDirectoryClient(dataPartitionId, directoryName, containerName);
+        try {
+            PagedIterable<PathItem> pathItems = dataLakeDirectoryClient.listPaths(true, false, null, null);
+            List<String> filePaths = new ArrayList<>();
+            for (PathItem pathItem : pathItems) {
+                if (!pathItem.isDirectory()) {
+                    filePaths.add(pathItem.getName());
+                }
+            }
+            return filePaths;
+        } catch (DataLakeStorageException ex) {
+            throw handleDataLakeStoreException(ex.getStatusCode(), "Error listing file paths from directory.", ex);
+        } catch (Exception ex) {
+            throw handleDataLakeStoreException(HttpStatus.SC_INTERNAL_SERVER_ERROR, "Generic error occurred.", ex);
+        }
+    }
+
+    /**
+     * Delete a directory and all its contents recursively.
+     * @param dataPartitionId dataPartitionId
+     * @param containerName containerName
+     * @param directoryName directoryName
+     */
+    public void deleteDirectory(final String dataPartitionId, final String containerName, final String directoryName) {
+        DataLakeDirectoryClient dataLakeDirectoryClient = createDataLakeDirectoryClient(dataPartitionId, directoryName, containerName);
+        try {
+            dataLakeDirectoryClient.deleteWithResponse(true, null, null, null);
+        } catch (DataLakeStorageException ex) {
+            throw handleDataLakeStoreException(ex.getStatusCode(),
+                    String.format("Error deleting directory '%s' in container '%s'.", directoryName, containerName), ex);
+        } catch (Exception ex) {
+            throw handleDataLakeStoreException(HttpStatus.SC_INTERNAL_SERVER_ERROR,
+                    String.format("Error deleting directory '%s' in container '%s'.", directoryName, containerName), ex);
+        }
     }
 
     /**
@@ -250,5 +343,31 @@ public class DataLakeStore {
     private AppException handleDataLakeStoreException(final int status, final String errorMessage, final Exception ex) {
         LOGGER.error(errorMessage, ex);
         return new AppException(status, errorMessage, ex.getMessage(), ex);
+    }
+
+    /**
+     * Checks whether the given exception (or any of its causes) is a Netty-related
+     * timeout or pool-exhaustion exception.
+     *
+     * @param ex the throwable to inspect
+     * @return {@code true} if the cause is a Netty-related timeout exception
+     */
+    private boolean isWrappedTimeoutException(final Throwable ex) {
+        Throwable cause = ex;
+        while (cause != null) {
+            String className = cause.getClass().getName();
+            if (className.contains("PoolAcquireTimeoutException")
+                    || className.contains("PoolAcquirePendingLimitException")
+                    || className.contains("ConnectTimeoutException")
+                    || className.contains("ReadTimeoutException")
+                    || className.contains("WriteTimeoutException")) {
+                return true;
+            }
+            if (cause instanceof java.util.concurrent.TimeoutException) {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
     }
 }

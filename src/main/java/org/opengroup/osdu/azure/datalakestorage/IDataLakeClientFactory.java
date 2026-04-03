@@ -14,6 +14,7 @@
 
 package org.opengroup.osdu.azure.datalakestorage;
 
+import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.file.datalake.DataLakeDirectoryClient;
 import com.azure.storage.file.datalake.DataLakeServiceClient;
 
@@ -50,4 +51,11 @@ public interface IDataLakeClientFactory {
     DataLakeServiceClient getDataLakeServiceClient(
             String dataPartitionId,
             String fileSystemName);
+
+    /**
+     * @param dataPartitionId dataPartitionId
+     * @return BlobServiceClient for the hierarchical storage account.
+     */
+    BlobServiceClient getBlobServiceClient(
+            String dataPartitionId);
 }
