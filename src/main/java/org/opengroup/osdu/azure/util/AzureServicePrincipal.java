@@ -29,6 +29,8 @@ import com.azure.identity.ManagedIdentityCredentialBuilder;
 import com.azure.identity.WorkloadIdentityCredential;
 import com.azure.identity.WorkloadIdentityCredentialBuilder;
 
+import java.time.Duration;
+
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.springframework.stereotype.Component;
 
@@ -167,15 +169,18 @@ public final class AzureServicePrincipal {
      * @throws AppException if token acquisition fails or returns null
      */
     public String getLocalDevToken(final String scope) {
+        if (scope == null || scope.trim().isEmpty()) {
+            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON, "Scope must not be null or empty");
+        }
         try {
             ChainedTokenCredentialBuilder credentialBuilder = this.createLocalChainedTokenCredentialBuilder();
 
             ChainedTokenCredential chainedCredential = credentialBuilder.build();
 
             TokenRequestContext requestContext = new TokenRequestContext();
-            requestContext.addScopes(scope);
+            requestContext.addScopes(scope.trim());
 
-            AccessToken token = chainedCredential.getToken(requestContext).block();
+            AccessToken token = chainedCredential.getToken(requestContext).block(Duration.ofSeconds(30));
 
             if (token != null && token.getToken() != null) {
                 return token.getToken();
@@ -205,7 +210,7 @@ public final class AzureServicePrincipal {
 
         return credentialBuilder;
     }
-    
+
     /**
      * Method to generate token using Workload Identity.
      * @param app_resource_id The resource ID of the target application

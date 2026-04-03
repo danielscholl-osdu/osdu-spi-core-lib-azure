@@ -72,6 +72,22 @@ public class LocalEnvironmentValidator {
             throw new IllegalStateException(errorMsg);
         }
 
+        // Check if running in Azure Container Apps
+        if (System.getenv("CONTAINER_APP_NAME") != null) {
+            String errorMsg = "SECURITY VIOLATION: Local development profile detected in Azure Container Apps! "
+                            + "The 'local' profile must not be used in deployed environments.";
+            LOGGER.error(errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+
+        // Check if running in Azure Functions
+        if (System.getenv("FUNCTIONS_WORKER_RUNTIME") != null) {
+            String errorMsg = "SECURITY VIOLATION: Local development profile detected in Azure Functions! "
+                            + "The 'local' profile must not be used in deployed environments.";
+            LOGGER.error(errorMsg);
+            throw new IllegalStateException(errorMsg);
+        }
+
         // Check for Azure Managed Identity endpoint (indicates running in Azure)
         if (System.getenv("MSI_ENDPOINT") != null || System.getenv("IDENTITY_ENDPOINT") != null) {
             String errorMsg = "SECURITY VIOLATION: Local development profile detected in Azure environment with Managed Identity! "
@@ -80,10 +96,12 @@ public class LocalEnvironmentValidator {
             throw new IllegalStateException(errorMsg);
         }
 
-        // Additional check for common CI/CD environments
+        // Check for common CI/CD environments — local dev credentials must not run in CI pipelines
         if (System.getenv("CI") != null || System.getenv("CONTINUOUS_INTEGRATION") != null) {
-            LOGGER.warn("Local development profile detected in CI/CD environment. "
-                       + "Ensure this is intentional for testing purposes only.");
+            String errorMsg = "SECURITY VIOLATION: Local development profile detected in CI/CD environment! "
+                            + "The 'local' profile must not be used in automated pipelines.";
+            LOGGER.error(errorMsg);
+            throw new IllegalStateException(errorMsg);
         }
 
         LOGGER.info("Local environment validation passed. Running in local development mode.");

@@ -20,6 +20,9 @@ import org.springframework.stereotype.Component;
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
 
+import java.util.Arrays;
+import java.util.List;
+
 import static org.opengroup.osdu.azure.util.AuthUtils.getClientSecret;
 
 /**
@@ -92,6 +95,7 @@ public class AzureServicePrincipleTokenService {
             if (environment.acceptsProfiles(Profiles.of("local"))
                 && localDevelopmentConfiguration != null
                 && localDevelopmentConfiguration.getEnableLocalCredentials()) {
+                assertNotCloudEnvironment();
                 accessToken = this.azureServicePrincipal.getLocalDevToken(aadClientId.concat("/.default"));
             } else if (workloadIdentityConfiguration.getIsEnabled()) {
                 accessToken = this.azureServicePrincipal.getWIToken(aadClientId, scope);
@@ -129,5 +133,34 @@ public class AzureServicePrincipleTokenService {
         }
 
         return accessToken;
+    }
+
+    /**
+     * Asserts that the application is not running in a cloud environment.
+     * Called inline before every local-dev token acquisition so the check cannot be
+     * bypassed by bean-loading order or component-scan configuration.
+     * <p>
+     * Note: CI/CD pipeline checks are handled by {@code LocalEnvironmentValidator} at
+     * startup. This method focuses on cloud runtime indicators only.
+     *
+     * @throws IllegalStateException if a cloud environment indicator is detected
+     */
+    private static void assertNotCloudEnvironment() {
+        List<String> cloudIndicators = Arrays.asList(
+                "KUBERNETES_SERVICE_HOST",
+                "WEBSITE_INSTANCE_ID",
+                "IDENTITY_ENDPOINT",
+                "MSI_ENDPOINT",
+                "CONTAINER_APP_NAME",
+                "FUNCTIONS_WORKER_RUNTIME",
+                "ACI_INSTANCE_NAME"
+        );
+        for (String indicator : cloudIndicators) {
+            if (System.getenv(indicator) != null) {
+                throw new IllegalStateException(
+                        "Refusing local-dev credentials: cloud environment indicator '" + indicator + "' is set. "
+                        + "The 'local' profile must not be used outside of a developer workstation.");
+            }
+        }
     }
 }

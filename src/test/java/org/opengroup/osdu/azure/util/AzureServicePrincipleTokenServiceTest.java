@@ -18,6 +18,8 @@ import org.opengroup.osdu.azure.di.WorkloadIdentityConfiguration;
 
 import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.search.IdToken;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -58,6 +60,9 @@ public class AzureServicePrincipleTokenServiceTest {
 
     @Mock
     private WorkloadIdentityConfiguration workloadIdentityConfiguration;
+
+    @Mock
+    private Environment environment;
 
     @InjectMocks
     private AzureServicePrincipleTokenService azureServicePrincipleTokenService;

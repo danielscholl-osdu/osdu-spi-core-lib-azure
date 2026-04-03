@@ -37,6 +37,7 @@ public class LocalDevelopmentConfiguration {
      * Enable or disable local development credentials.
      * When enabled, the service will use Azure CLI, VS Code, or IntelliJ credentials
      * instead of Service Principal, Managed Identity, or Workload Identity.
+     * Defaults to false — must be explicitly set to true to activate local dev mode.
      */
-    private Boolean enableLocalCredentials = true;
+    private Boolean enableLocalCredentials = false;
 }

@@ -9,6 +9,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.opengroup.osdu.azure.cache.AzureServicePrincipleTokenServiceCache;
 import org.opengroup.osdu.azure.di.AzureActiveDirectoryConfiguration;
 import org.opengroup.osdu.azure.di.LocalDevelopmentConfiguration;
 import org.opengroup.osdu.azure.di.PodIdentityConfiguration;
@@ -51,6 +52,9 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
 
     @Mock
     private AzureServicePrincipal azureServicePrincipal;
+
+    @Mock
+    private AzureServicePrincipleTokenServiceCache tokenCache;
 
     @InjectMocks
     private AzureServicePrincipleTokenService tokenService;
@@ -103,8 +107,8 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         verify(azureServicePrincipal).getLocalDevToken(anyString());
         
         // Verify other methods were not called
-        verify(azureServicePrincipal, never()).getWIToken(anyString());
-        verify(azureServicePrincipal, never()).getMSIToken();
+        verify(azureServicePrincipal, never()).getWIToken(anyString(), anyString());
+        verify(azureServicePrincipal, never()).getMSIToken(anyString());
         verify(azureServicePrincipal, never()).getIdToken(anyString(), anyString(), anyString(), anyString());
     }
 
@@ -114,7 +118,7 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         String testToken = createTestJwtToken();
         when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(false);
         when(workloadIdentityConfiguration.getIsEnabled()).thenReturn(true);
-        when(azureServicePrincipal.getWIToken(eq(AAD_CLIENT_ID)))
+        when(azureServicePrincipal.getWIToken(eq(AAD_CLIENT_ID), anyString()))
             .thenReturn(testToken);
 
         // Act
@@ -123,10 +127,10 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         // Assert
         assertNotNull(token);
         assertEquals(testToken, token);
-        
+
         // Verify workload identity method was called
-        verify(azureServicePrincipal).getWIToken(eq(AAD_CLIENT_ID));
-        
+        verify(azureServicePrincipal).getWIToken(eq(AAD_CLIENT_ID), anyString());
+
         // Verify local dev method was not called
         verify(azureServicePrincipal, never()).getLocalDevToken(anyString());
     }
@@ -139,7 +143,7 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         when(localDevelopmentConfiguration.getEnableLocalCredentials()).thenReturn(false);
         when(workloadIdentityConfiguration.getIsEnabled()).thenReturn(false);
         when(podIdentityConfiguration.getIsEnabled()).thenReturn(true);
-        when(azureServicePrincipal.getMSIToken())
+        when(azureServicePrincipal.getMSIToken(anyString()))
             .thenReturn(testToken);
 
         // Act
@@ -148,10 +152,10 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         // Assert
         assertNotNull(token);
         assertEquals(testToken, token);
-        
+
         // Verify MSI method was called
-        verify(azureServicePrincipal).getMSIToken();
-        
+        verify(azureServicePrincipal).getMSIToken(anyString());
+
         // Verify local dev method was not called
         verify(azureServicePrincipal, never()).getLocalDevToken(anyString());
     }
@@ -163,7 +167,7 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         ReflectionTestUtils.setField(tokenService, "localDevelopmentConfiguration", null);
         when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(true);
         when(workloadIdentityConfiguration.getIsEnabled()).thenReturn(true);
-        when(azureServicePrincipal.getWIToken(eq(AAD_CLIENT_ID)))
+        when(azureServicePrincipal.getWIToken(eq(AAD_CLIENT_ID), anyString()))
             .thenReturn(testToken);
 
         // Act
@@ -172,9 +176,9 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         // Assert
         assertNotNull(token);
         assertEquals(testToken, token);
-        
+
         // Verify fallback to workload identity
-        verify(azureServicePrincipal).getWIToken(eq(AAD_CLIENT_ID));
+        verify(azureServicePrincipal).getWIToken(eq(AAD_CLIENT_ID), anyString());
         
         // Verify local dev method was not called
         verify(azureServicePrincipal, never()).getLocalDevToken(anyString());
