@@ -6,6 +6,8 @@ import com.auth0.jwt.algorithms.Algorithm;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -21,6 +23,9 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -85,6 +90,16 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         // Set up the mocked AzureServicePrincipal
         ReflectionTestUtils.setField(tokenService, "azureServicePrincipal", azureServicePrincipal);
         ReflectionTestUtils.setField(tokenService, "aadClientId", AAD_CLIENT_ID);
+        // Inject a clean env reader so tests are isolated from host environment variables.
+        // Individual tests that need a specific indicator can override this via setEnvReader().
+        ReflectionTestUtils.setField(tokenService, "envReader", (Function<String, String>) k -> null);
+    }
+
+    /** Helper: inject an env reader that returns a non-null value for one indicator. */
+    private void setEnvReader(final String indicatorName) {
+        Map<String, String> fakeEnv = new HashMap<>();
+        fakeEnv.put(indicatorName, "true");
+        ReflectionTestUtils.setField(tokenService, "envReader", (Function<String, String>) fakeEnv::get);
     }
 
     @Test
@@ -179,8 +194,43 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
 
         // Verify fallback to workload identity
         verify(azureServicePrincipal).getWIToken(eq(AAD_CLIENT_ID), anyString());
-        
+
         // Verify local dev method was not called
+        verify(azureServicePrincipal, never()).getLocalDevToken(anyString());
+    }
+
+    // -------------------------------------------------------------------------
+    // assertNotCloudEnvironment() safety checks
+    // -------------------------------------------------------------------------
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "KUBERNETES_SERVICE_HOST",
+        "WEBSITE_INSTANCE_ID",
+        "IDENTITY_ENDPOINT",
+        "MSI_ENDPOINT",
+        "CONTAINER_APP_NAME",
+        "FUNCTIONS_WORKER_RUNTIME",
+        "ACI_INSTANCE_NAME",
+        "CI",
+        "CONTINUOUS_INTEGRATION"
+    })
+    public void testGetAuthorizationToken_CloudIndicatorSet_ThrowsBeforeTokenAcquisition(
+            final String cloudIndicator) {
+        // Arrange — simulate local profile active with credentials enabled, but a cloud indicator is set
+        when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(true);
+        when(localDevelopmentConfiguration.getEnableLocalCredentials()).thenReturn(true);
+        setEnvReader(cloudIndicator);
+
+        // Act & Assert — security check must throw BEFORE any token is acquired
+        IllegalStateException ex = assertThrows(
+            IllegalStateException.class,
+            () -> tokenService.getAuthorizationToken());
+
+        assertTrue(ex.getMessage().contains(cloudIndicator),
+            "Exception message should identify the triggering indicator");
+
+        // Verify no token acquisition was attempted
         verify(azureServicePrincipal, never()).getLocalDevToken(anyString());
     }
 }

@@ -32,6 +32,8 @@ import com.azure.identity.WorkloadIdentityCredentialBuilder;
 import java.time.Duration;
 
 import org.opengroup.osdu.core.common.model.http.AppException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /**
@@ -45,6 +47,7 @@ import org.springframework.stereotype.Component;
 @Component
 public final class AzureServicePrincipal {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AzureServicePrincipal.class);
     private static final int ERROR_STATUS_CODE = 500;
     private static final String ERROR_REASON = "Received empty token";
     private static final String ERROR_MESSAGE_SPN = "SPN client returned null token";
@@ -164,6 +167,9 @@ public final class AzureServicePrincipal {
     /**
      * Gets an authentication token using local development credentials with custom scope.
      *
+     * <p><b>Note</b>: This method calls {@code .block()} on the reactive credential chain.
+     * It must not be invoked from a Reactor event-loop thread (e.g., WebFlux handlers).
+     *
      * @param scope The scope to request
      * @return The authentication token string
      * @throws AppException if token acquisition fails or returns null
@@ -187,9 +193,12 @@ public final class AzureServicePrincipal {
             }
             throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
                 "Local development credential returned null token");
+        } catch (AppException e) {
+            throw e;
         } catch (Exception e) {
+            LOGGER.warn("Local development token acquisition failed: {}", e.getMessage());
             throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
-                "Local development token acquisition failed: " + e.getMessage());
+                "Local development token acquisition failed. Ensure 'az login' or IntelliJ Azure plugin is configured correctly.");
         }
     }
 

@@ -23,11 +23,12 @@ import org.springframework.core.env.Profiles;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.verify;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
-import static org.mockito.ArgumentMatchers.eq;
 
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
@@ -70,6 +71,9 @@ public class AzureServicePrincipleTokenServiceTest {
     @BeforeEach
     public void init() {
         MockitoAnnotations.openMocks(this);
+        // Explicitly stub Environment to return false for "local" profile so existing tests
+        // always exercise the non-local-dev code path, regardless of env vars in CI.
+        when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(false);
     }
 
     @Test

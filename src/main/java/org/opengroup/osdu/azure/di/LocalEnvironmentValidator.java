@@ -20,6 +20,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 
+import java.util.function.Function;
+
 /**
  * Validator to ensure that the local development profile is not accidentally used
  * in production or deployed environments.
@@ -33,6 +35,22 @@ import org.springframework.stereotype.Component;
 public class LocalEnvironmentValidator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(LocalEnvironmentValidator.class);
+
+    private final Function<String, String> envReader;
+
+    /** Default constructor used by Spring. */
+    public LocalEnvironmentValidator() {
+        this.envReader = System::getenv;
+    }
+
+    /**
+     * Package-private constructor for unit testing with a controlled environment.
+     *
+     * @param envVarReader function that reads an environment variable by name
+     */
+    LocalEnvironmentValidator(final Function<String, String> envVarReader) {
+        this.envReader = envVarReader;
+    }
 
     /**
      * Validates that the application is not running in a production or cloud environment
@@ -49,7 +67,7 @@ public class LocalEnvironmentValidator {
         LOGGER.warn("==========================================================");
 
         // Check if running in Kubernetes
-        if (System.getenv("KUBERNETES_SERVICE_HOST") != null) {
+        if (envReader.apply("KUBERNETES_SERVICE_HOST") != null) {
             String errorMsg = "SECURITY VIOLATION: Local development profile detected in Kubernetes environment! "
                             + "The 'local' profile must not be used in deployed environments.";
             LOGGER.error(errorMsg);
@@ -57,7 +75,7 @@ public class LocalEnvironmentValidator {
         }
 
         // Check if running in Azure App Service
-        if (System.getenv("WEBSITE_INSTANCE_ID") != null) {
+        if (envReader.apply("WEBSITE_INSTANCE_ID") != null) {
             String errorMsg = "SECURITY VIOLATION: Local development profile detected in Azure App Service! "
                             + "The 'local' profile must not be used in deployed environments.";
             LOGGER.error(errorMsg);
@@ -65,7 +83,7 @@ public class LocalEnvironmentValidator {
         }
 
         // Check if running in Azure Container Instance
-        if (System.getenv("ACI_INSTANCE_NAME") != null) {
+        if (envReader.apply("ACI_INSTANCE_NAME") != null) {
             String errorMsg = "SECURITY VIOLATION: Local development profile detected in Azure Container Instance! "
                             + "The 'local' profile must not be used in deployed environments.";
             LOGGER.error(errorMsg);
@@ -73,7 +91,7 @@ public class LocalEnvironmentValidator {
         }
 
         // Check if running in Azure Container Apps
-        if (System.getenv("CONTAINER_APP_NAME") != null) {
+        if (envReader.apply("CONTAINER_APP_NAME") != null) {
             String errorMsg = "SECURITY VIOLATION: Local development profile detected in Azure Container Apps! "
                             + "The 'local' profile must not be used in deployed environments.";
             LOGGER.error(errorMsg);
@@ -81,7 +99,7 @@ public class LocalEnvironmentValidator {
         }
 
         // Check if running in Azure Functions
-        if (System.getenv("FUNCTIONS_WORKER_RUNTIME") != null) {
+        if (envReader.apply("FUNCTIONS_WORKER_RUNTIME") != null) {
             String errorMsg = "SECURITY VIOLATION: Local development profile detected in Azure Functions! "
                             + "The 'local' profile must not be used in deployed environments.";
             LOGGER.error(errorMsg);
@@ -89,7 +107,7 @@ public class LocalEnvironmentValidator {
         }
 
         // Check for Azure Managed Identity endpoint (indicates running in Azure)
-        if (System.getenv("MSI_ENDPOINT") != null || System.getenv("IDENTITY_ENDPOINT") != null) {
+        if (envReader.apply("MSI_ENDPOINT") != null || envReader.apply("IDENTITY_ENDPOINT") != null) {
             String errorMsg = "SECURITY VIOLATION: Local development profile detected in Azure environment with Managed Identity! "
                             + "The 'local' profile must not be used in deployed environments.";
             LOGGER.error(errorMsg);
@@ -97,7 +115,7 @@ public class LocalEnvironmentValidator {
         }
 
         // Check for common CI/CD environments — local dev credentials must not run in CI pipelines
-        if (System.getenv("CI") != null || System.getenv("CONTINUOUS_INTEGRATION") != null) {
+        if (envReader.apply("CI") != null || envReader.apply("CONTINUOUS_INTEGRATION") != null) {
             String errorMsg = "SECURITY VIOLATION: Local development profile detected in CI/CD environment! "
                             + "The 'local' profile must not be used in automated pipelines.";
             LOGGER.error(errorMsg);

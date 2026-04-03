@@ -123,49 +123,46 @@ public class AzureServicePrincipalLocalDevTest {
         setupSpyWithMocks();
         String scope = "test-scope";
         String errorMessage = "Authentication failed";
-        
+
         when(mockChainedCredential.getToken(any(TokenRequestContext.class)))
             .thenReturn(Mono.error(new RuntimeException(errorMessage)));
-        
+
         // Act & Assert
         AppException exception = assertThrows(AppException.class, () -> {
             spyServicePrincipal.getLocalDevToken(scope);
         });
-        
+
         assertEquals(500, exception.getError().getCode());
         assertEquals("Received empty token", exception.getError().getReason());
+        // The sanitized message no longer includes the raw SDK exception text to avoid leaking
+        // internal details (e.g., filesystem paths) into API responses. The original exception is
+        // logged at WARN level for diagnostics.
         assertTrue(exception.getError().getMessage().contains("Local development token acquisition failed"));
-        assertTrue(exception.getError().getMessage().contains(errorMessage));
+        assertFalse(exception.getError().getMessage().contains(errorMessage),
+            "Internal error details must not be propagated to the API response");
     }
 
     @Test
-    public void testGetLocalDevToken_MultipleScopes() {
+    public void testGetLocalDevToken_ScopeIsForwardedToCredential() {
         // Arrange
         setupSpyWithMocks();
-        String scope1 = "https://management.azure.com/.default";
-        String scope2 = "https://graph.microsoft.com/.default";
-        String expectedToken = "mock-token-for-multiple-scopes";
-        
+        String scope = "https://management.azure.com/.default";
+        String expectedToken = "mock-token-for-scope-forwarding";
+
         when(mockAccessToken.getToken()).thenReturn(expectedToken);
         when(mockChainedCredential.getToken(any(TokenRequestContext.class)))
             .thenReturn(Mono.just(mockAccessToken));
-        
-        // Act - test with first scope
-        String token1 = spyServicePrincipal.getLocalDevToken(scope1);
-        
-        // Act - test with second scope
-        String token2 = spyServicePrincipal.getLocalDevToken(scope2);
-        
+
+        // Act
+        String token = spyServicePrincipal.getLocalDevToken(scope);
+
         // Assert
-        assertEquals(expectedToken, token1);
-        assertEquals(expectedToken, token2);
-        
-        // Verify both calls were made with correct scopes
+        assertEquals(expectedToken, token);
+
+        // Verify the scope was forwarded correctly to the credential
         ArgumentCaptor<TokenRequestContext> contextCaptor = ArgumentCaptor.forClass(TokenRequestContext.class);
-        verify(mockChainedCredential, times(2)).getToken(contextCaptor.capture());
-        
-        assertTrue(contextCaptor.getAllValues().get(0).getScopes().contains(scope1));
-        assertTrue(contextCaptor.getAllValues().get(1).getScopes().contains(scope2));
+        verify(mockChainedCredential).getToken(contextCaptor.capture());
+        assertTrue(contextCaptor.getValue().getScopes().contains(scope));
     }
 
     @Test

@@ -22,6 +22,7 @@ import jakarta.inject.Named;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.function.Function;
 
 import static org.opengroup.osdu.azure.util.AuthUtils.getClientSecret;
 
@@ -66,6 +67,9 @@ public class AzureServicePrincipleTokenService {
 
     private static final String MANAGEMENT_SCOPE = "https://management.azure.com/.default";
 
+    /** Overridable in tests via ReflectionTestUtils to simulate specific environments. */
+    private Function<String, String> envReader = System::getenv;
+
 
     /**
      * @return service principle's authorization token
@@ -80,6 +84,16 @@ public class AzureServicePrincipleTokenService {
      * @return service principle's authorization token
      */
     public String getAuthorizationToken(final String scope) {
+        // Evaluate local-dev mode eagerly so the security check runs BEFORE entering the
+        // try/catch block — this prevents IllegalStateException from being swallowed into
+        // the generic "Error generating token" error message.
+        final boolean useLocalDevCredentials = environment.acceptsProfiles(Profiles.of("local"))
+                && localDevelopmentConfiguration != null
+                && localDevelopmentConfiguration.getEnableLocalCredentials();
+        if (useLocalDevCredentials) {
+            assertNotCloudEnvironment();
+        }
+
         String accessToken = "";
         try {
             String cacheKey = "token:" + scope;
@@ -88,14 +102,12 @@ public class AzureServicePrincipleTokenService {
                 return cachedToken.getTokenValue();
             }
 
-            // 1. If running local mode, try development credentials (Azure CLI, VS Code, IntelliJ)
+            // 1. If running local mode, try development credentials (Azure CLI / IntelliJ)
             // 2. Try Workload Identity first (modern K8s method)
             // 3. Try Pod Identity second (legacy K8s method)
             // 4. Fallback to Service Principal with client secret
-            if (environment.acceptsProfiles(Profiles.of("local"))
-                && localDevelopmentConfiguration != null
-                && localDevelopmentConfiguration.getEnableLocalCredentials()) {
-                assertNotCloudEnvironment();
+            // Note: local-dev path always requests the .default scope for the AAD client.
+            if (useLocalDevCredentials) {
                 accessToken = this.azureServicePrincipal.getLocalDevToken(aadClientId.concat("/.default"));
             } else if (workloadIdentityConfiguration.getIsEnabled()) {
                 accessToken = this.azureServicePrincipal.getWIToken(aadClientId, scope);
@@ -136,16 +148,13 @@ public class AzureServicePrincipleTokenService {
     }
 
     /**
-     * Asserts that the application is not running in a cloud environment.
-     * Called inline before every local-dev token acquisition so the check cannot be
-     * bypassed by bean-loading order or component-scan configuration.
-     * <p>
-     * Note: CI/CD pipeline checks are handled by {@code LocalEnvironmentValidator} at
-     * startup. This method focuses on cloud runtime indicators only.
+     * Asserts that the application is not running in a cloud or CI/CD environment.
+     * Called before every local-dev token acquisition so the check cannot be bypassed
+     * by bean-loading order or component-scan configuration.
      *
-     * @throws IllegalStateException if a cloud environment indicator is detected
+     * @throws IllegalStateException if a cloud or CI environment indicator is detected
      */
-    private static void assertNotCloudEnvironment() {
+    private void assertNotCloudEnvironment() {
         List<String> cloudIndicators = Arrays.asList(
                 "KUBERNETES_SERVICE_HOST",
                 "WEBSITE_INSTANCE_ID",
@@ -153,12 +162,14 @@ public class AzureServicePrincipleTokenService {
                 "MSI_ENDPOINT",
                 "CONTAINER_APP_NAME",
                 "FUNCTIONS_WORKER_RUNTIME",
-                "ACI_INSTANCE_NAME"
+                "ACI_INSTANCE_NAME",
+                "CI",
+                "CONTINUOUS_INTEGRATION"
         );
         for (String indicator : cloudIndicators) {
-            if (System.getenv(indicator) != null) {
+            if (envReader.apply(indicator) != null) {
                 throw new IllegalStateException(
-                        "Refusing local-dev credentials: cloud environment indicator '" + indicator + "' is set. "
+                        "Refusing local-dev credentials: environment indicator '" + indicator + "' is set. "
                         + "The 'local' profile must not be used outside of a developer workstation.");
             }
         }

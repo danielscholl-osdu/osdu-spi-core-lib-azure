@@ -22,9 +22,12 @@ Before using local development authentication, ensure you have one of the follow
    ```
 
 ### Option 2: Visual Studio Code
-1. Install [Visual Studio Code](https://code.visualstudio.com/)
-2. Install the [Azure Account extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.azure-account)
-3. Sign in to Azure through VS Code (Ctrl/Cmd+Shift+P → "Azure: Sign In")
+VS Code authentication is handled via the Azure CLI. The Azure Account extension uses `az login` credentials under the hood.
+
+1. Install [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) and run `az login`
+2. Install [Visual Studio Code](https://code.visualstudio.com/) and the [Azure Account extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode.azure-account) (optional, for UI convenience)
+
+> **Note**: The `VisualStudioCodeCredential` was deprecated in Azure Identity SDK 1.11.0+. The credential chain uses `AzureCliCredential` to serve VS Code users — ensure `az login` is completed in your terminal before starting the service.
 
 ### Option 3: IntelliJ IDEA
 1. Install [IntelliJ IDEA](https://www.jetbrains.com/idea/)
@@ -41,7 +44,7 @@ Update your service's `pom.xml` to use the version that has the local developmen
 <dependency>
     <groupId>org.opengroup.osdu</groupId>
     <artifactId>core-lib-azure</artifactId>
-    <version>changeme</version>
+    <version>0.26.0</version><!-- Replace with the actual release version -->
 </dependency>
 ```
 
@@ -83,8 +86,7 @@ When the local profile is active, the authentication flow works as follows:
 
 1. **Local Development Check**: The system detects that the `local` profile is active
 2. **Credential Chain**: Uses Azure Identity SDK's credential chain in this order:
-   - Azure CLI credential (most common)
-   - Visual Studio Code credential
+   - Azure CLI credential (covers both Azure CLI and VS Code users)
    - IntelliJ credential
 3. **Fallback**: If local development is disabled, falls back to production methods:
    - Workload Identity (for AKS)
@@ -156,7 +158,7 @@ mvn spring-boot:run -Dspring.profiles.active=local
 2. **Use environment-specific configuration files**:
    - `application.properties` (production)
    - `application-local.properties` (local development)
-4. **Use least-privilege access** - only grant necessary permissions to your account
+3. **Use least-privilege access** - only grant necessary permissions to your account
 
 ## Configuration Reference
 
