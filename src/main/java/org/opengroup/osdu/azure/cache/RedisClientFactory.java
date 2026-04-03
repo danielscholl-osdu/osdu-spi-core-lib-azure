@@ -26,12 +26,10 @@ import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
 
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
-
 import java.net.InetSocketAddress;
 import java.time.Duration;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
 import java.util.concurrent.ConcurrentHashMap;
@@ -50,6 +48,7 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
     /** Maximum time to wait for a token from IMDS before giving up. */
     private static final Duration IMDS_TIMEOUT = Duration.ofSeconds(10);
     private static final int AZURE_MANAGED_REDIS_PORT = 10000;
+
     private static RedissonClient redissonClient = null;
 
     @Autowired
@@ -327,6 +326,7 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
             AccessToken accessToken = defaultAzureCredential.getToken(tokenRequestContext)
                     .timeout(IMDS_TIMEOUT)
                     .block();
+
             final String token = accessToken == null ? null : accessToken.getToken();
             if (token == null || token.isBlank()) {
                 logger.warn("Failed to acquire access token from MSI");
@@ -373,13 +373,6 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
 
         /**
          * Resolves fresh MSI credentials for the Redis connection.
-         * <p>
-         * The IMDS call is offloaded to a bounded-elastic thread via
-         * {@code .subscribeOn(Schedulers.boundedElastic())} so that Redisson's
-         * Netty I/O thread is never blocked while waiting for the token.
-         * The returned {@link CompletionStage} is non-blocking; Redisson subscribes
-         * to it asynchronously.
-         *
          * @param address the Redis server address
          * @return a CompletionStage containing the credentials
          */
@@ -387,17 +380,19 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
         public CompletionStage<Credentials> resolve(final InetSocketAddress address) {
             final ICoreLogger logger = CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME);
 
-            return Mono.fromCallable(() -> {
+            try {
                 final String token = getTokenFromMsi();
                 if (token != null) {
-                    // Use principal ID as username, not client ID
                     logger.debug("RedissonMsiCredentialsResolver providing fresh credentials for address: {} (principal ID: {})", address, principalId);
-                    return new Credentials(principalId, token);
+                    return CompletableFuture.completedFuture(new Credentials(principalId, token));
+                } else {
+                    logger.error("RedissonMsiCredentialsResolver failed to obtain MSI credentials for address: {}", address);
+                    return CompletableFuture.failedFuture(new RuntimeException("Failed to obtain MSI credentials"));
                 }
-                throw new RuntimeException("Failed to obtain MSI credentials");
-            })
-            .subscribeOn(Schedulers.boundedElastic())
-            .toFuture();
+            } catch (Exception e) {
+                logger.error("RedissonMsiCredentialsResolver error resolving credentials for address: {}", address, e);
+                return CompletableFuture.failedFuture(e);
+            }
         }
     }
 }
