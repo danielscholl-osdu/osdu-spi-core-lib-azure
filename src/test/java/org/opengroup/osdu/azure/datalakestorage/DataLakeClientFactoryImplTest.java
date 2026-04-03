@@ -15,6 +15,7 @@
 package org.opengroup.osdu.azure.datalakestorage;
 
 import com.azure.identity.DefaultAzureCredential;
+import com.azure.storage.blob.BlobServiceClient;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.azure.storage.file.datalake.DataLakeDirectoryClient;
 import com.azure.storage.file.datalake.DataLakeFileSystemClient;
@@ -207,5 +208,41 @@ public class DataLakeClientFactoryImplTest {
         assertNotNull(dataLakeServiceClient);
         String cacheKey = String.format("%s-%s", PARTITION_ID, FILE_SYSTEM_NAME);
         verify(dataLakeContainerClientMap, times(0)).get(cacheKey);
+    }
+
+    @Test
+    public void getBlobServiceClient_Success() {
+        when(mockBlobStoreRetryConfiguration.getRequestRetryOptions())
+                .thenReturn(mockRequestRetryOptions);
+
+        BlobServiceClient blobServiceClient = dataLakeClientFactoryImpl.getBlobServiceClient(PARTITION_ID);
+
+        assertNotNull(blobServiceClient);
+    }
+
+    @Test
+    public void getBlobServiceClient_MsiEnabled() {
+        when(mockBlobStoreRetryConfiguration.getRequestRetryOptions())
+                .thenReturn(mockRequestRetryOptions);
+        when(mockMsiConfiguration.getIsEnabled()).thenReturn(true);
+
+        BlobServiceClient blobServiceClient = dataLakeClientFactoryImpl.getBlobServiceClient(PARTITION_ID);
+
+        assertNotNull(blobServiceClient);
+    }
+
+    @Test
+    public void getBlobServiceClient_should_return_cached_when_calledTwice() {
+        when(mockBlobStoreRetryConfiguration.getRequestRetryOptions())
+                .thenReturn(mockRequestRetryOptions);
+
+        BlobServiceClient first = dataLakeClientFactoryImpl.getBlobServiceClient(PARTITION_ID);
+        BlobServiceClient second = dataLakeClientFactoryImpl.getBlobServiceClient(PARTITION_ID);
+
+        assertNotNull(first);
+        assertNotNull(second);
+        assertEquals(first, second);
+        // Partition service should only be called once since the second call uses the cache
+        verify(mockPartitionServiceClient, times(1)).getPartition(PARTITION_ID);
     }
 }

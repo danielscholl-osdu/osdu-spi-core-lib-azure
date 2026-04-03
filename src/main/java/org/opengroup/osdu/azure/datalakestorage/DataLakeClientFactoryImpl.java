@@ -15,6 +15,8 @@
 package org.opengroup.osdu.azure.datalakestorage;
 
 import com.azure.identity.DefaultAzureCredential;
+import com.azure.storage.blob.BlobServiceClient;
+import com.azure.storage.blob.BlobServiceClientBuilder;
 import com.azure.storage.common.StorageSharedKeyCredential;
 import com.azure.storage.common.policy.RequestRetryOptions;
 import com.azure.storage.file.datalake.DataLakeDirectoryClient;
@@ -38,6 +40,7 @@ import java.util.concurrent.ConcurrentHashMap;
 public final class DataLakeClientFactoryImpl implements IDataLakeClientFactory {
 
     private Map<String, DataLakeServiceClient> dataLakeContainerClientMap;
+    private Map<String, BlobServiceClient> blobServiceClientMap;
 
     @Autowired
     private DefaultAzureCredential defaultAzureCredential;
@@ -61,6 +64,7 @@ public final class DataLakeClientFactoryImpl implements IDataLakeClientFactory {
         this.defaultAzureCredential = credentials;
         this.partitionService = partitionServiceClient;
         dataLakeContainerClientMap = new ConcurrentHashMap<>();
+        blobServiceClientMap = new ConcurrentHashMap<>();
     }
     /**
      * create DataLakeDirectoryClient.
@@ -151,7 +155,51 @@ public final class DataLakeClientFactoryImpl implements IDataLakeClientFactory {
     }
 
     /**
+     * Returns a cached {@link BlobServiceClient} for the hierarchical storage account
+     * associated with the given data partition. The client uses the {@code .blob.core.windows.net}
+     * endpoint (converted from the DFS endpoint) so that Blob REST API operations such as
+     * {@code Copy Blob} work correctly.
      *
+     * @param dataPartitionId dataPartitionId
+     * @return BlobServiceClient for the hierarchical storage account.
+     */
+    @Override
+    public BlobServiceClient getBlobServiceClient(final String dataPartitionId) {
+        String cacheKey = String.format("%s-HSABlobServiceClient", dataPartitionId);
+        return this.blobServiceClientMap.computeIfAbsent(cacheKey, k -> createBlobServiceClient(dataPartitionId));
+    }
+
+    /**
+     * Creates a new {@link BlobServiceClient} for the hierarchical storage account.
+     * The DFS endpoint ({@code .dfs.core.windows.net}) is converted to the blob endpoint
+     * ({@code .blob.core.windows.net}) because the Blob REST API (used by {@code beginCopy},
+     * {@code copyFromUrl}, etc.) requires the blob endpoint.
+     *
+     * @param dataPartitionId dataPartitionId
+     * @return BlobServiceClient targeting the blob endpoint of the hierarchical storage account.
+     */
+    private BlobServiceClient createBlobServiceClient(final String dataPartitionId) {
+        PartitionInfoAzure pi = this.partitionService.getPartition(dataPartitionId);
+        String endpoint = String.format("https://%s.blob.core.windows.net", pi.getHierarchicalStorageAccountName());
+        RequestRetryOptions requestRetryOptions = blobStoreRetryConfiguration.getRequestRetryOptions();
+        BlobServiceClientBuilder builder = new BlobServiceClientBuilder()
+                .endpoint(endpoint)
+                .retryOptions(requestRetryOptions);
+
+        if (msiConfiguration.getIsEnabled()) {
+            // Managed Identity authentication
+            return builder.credential(defaultAzureCredential).buildClient();
+        } else {
+            // Shared Key authentication
+            StorageSharedKeyCredential storageSharedKeyCredential = new StorageSharedKeyCredential(
+                    pi.getHierarchicalStorageAccountName(),
+                    pi.getHierarchicalStorageAccountKey()
+            );
+            return builder.credential(storageSharedKeyCredential).buildClient();
+        }
+    }
+
+    /**
      * @param endpoint Azure DataLake endpoint
      * @return DataLakeServiceClientBuilder
      */
