@@ -147,6 +147,19 @@ public class AzureServicePrincipleTokenService {
         return accessToken;
     }
 
+    /** Cloud and CI/CD environment variable indicators that must not be present on a developer workstation. */
+    private static final List<String> CLOUD_ENVIRONMENT_INDICATORS = Arrays.asList(
+            "KUBERNETES_SERVICE_HOST",
+            "WEBSITE_INSTANCE_ID",
+            "IDENTITY_ENDPOINT",
+            "MSI_ENDPOINT",
+            "CONTAINER_APP_NAME",
+            "FUNCTIONS_WORKER_RUNTIME",
+            "ACI_INSTANCE_NAME",
+            "CI",
+            "CONTINUOUS_INTEGRATION"
+    );
+
     /**
      * Asserts that the application is not running in a cloud or CI/CD environment.
      * Called before every local-dev token acquisition so the check cannot be bypassed
@@ -155,18 +168,7 @@ public class AzureServicePrincipleTokenService {
      * @throws IllegalStateException if a cloud or CI environment indicator is detected
      */
     private void assertNotCloudEnvironment() {
-        List<String> cloudIndicators = Arrays.asList(
-                "KUBERNETES_SERVICE_HOST",
-                "WEBSITE_INSTANCE_ID",
-                "IDENTITY_ENDPOINT",
-                "MSI_ENDPOINT",
-                "CONTAINER_APP_NAME",
-                "FUNCTIONS_WORKER_RUNTIME",
-                "ACI_INSTANCE_NAME",
-                "CI",
-                "CONTINUOUS_INTEGRATION"
-        );
-        for (String indicator : cloudIndicators) {
+        for (String indicator : CLOUD_ENVIRONMENT_INDICATORS) {
             if (envReader.apply(indicator) != null) {
                 throw new IllegalStateException(
                         "Refusing local-dev credentials: environment indicator '" + indicator + "' is set. "

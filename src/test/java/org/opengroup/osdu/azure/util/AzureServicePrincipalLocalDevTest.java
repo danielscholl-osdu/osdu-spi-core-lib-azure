@@ -173,6 +173,14 @@ public class AzureServicePrincipalLocalDevTest {
     }
 
     @Test
+    public void testGetLocalDevToken_ScopeWithInternalWhitespace_ThrowsAppException() {
+        AppException exception = assertThrows(AppException.class, () ->
+            azureServicePrincipal.getLocalDevToken("scope1 scope2"));
+        assertEquals(500, exception.getError().getCode());
+        assertTrue(exception.getError().getMessage().contains("Scope must not contain internal whitespace"));
+    }
+
+    @Test
     public void testCreateLocalChainedTokenCredentialBuilder_NotMocked() {
         // This test verifies that the actual implementation returns a non-null builder
         // when not mocked (for coverage of the actual method)

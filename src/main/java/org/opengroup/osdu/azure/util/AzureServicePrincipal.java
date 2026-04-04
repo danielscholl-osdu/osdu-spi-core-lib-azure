@@ -183,8 +183,12 @@ public final class AzureServicePrincipal {
 
             ChainedTokenCredential chainedCredential = credentialBuilder.build();
 
+            String trimmedScope = scope.trim();
+            if (trimmedScope.contains(" ")) {
+                throw new AppException(ERROR_STATUS_CODE, ERROR_REASON, "Scope must not contain internal whitespace");
+            }
             TokenRequestContext requestContext = new TokenRequestContext();
-            requestContext.addScopes(scope.trim());
+            requestContext.addScopes(trimmedScope);
 
             AccessToken token = chainedCredential.getToken(requestContext).block(Duration.ofSeconds(30));
 
