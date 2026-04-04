@@ -25,7 +25,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.function.Function;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -99,14 +98,14 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         ReflectionTestUtils.setField(tokenService, "aadClientId", AAD_CLIENT_ID);
         // Inject a clean env reader so tests are isolated from host environment variables.
         // Individual tests that need a specific indicator can override this via setEnvReader().
-        ReflectionTestUtils.setField(tokenService, "envReader", (Function<String, String>) k -> null);
+        tokenService.setEnvReader(k -> null);
     }
 
     /** Helper: inject an env reader that returns a non-null value for one indicator. */
     private void setEnvReader(final String indicatorName) {
         Map<String, String> fakeEnv = new HashMap<>();
         fakeEnv.put(indicatorName, "true");
-        ReflectionTestUtils.setField(tokenService, "envReader", (Function<String, String>) fakeEnv::get);
+        tokenService.setEnvReader(fakeEnv::get);
     }
 
     @Test

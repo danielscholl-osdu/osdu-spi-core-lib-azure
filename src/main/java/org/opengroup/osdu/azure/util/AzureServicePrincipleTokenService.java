@@ -67,8 +67,17 @@ public class AzureServicePrincipleTokenService {
 
     private static final String MANAGEMENT_SCOPE = "https://management.azure.com/.default";
 
-    /** Overridable in tests via ReflectionTestUtils to simulate specific environments. */
+    /** Environment variable reader; defaults to System::getenv. */
     private Function<String, String> envReader = System::getenv;
+
+    /**
+     * Package-private setter for test injection without reflection.
+     *
+     * @param reader the environment variable reader to use
+     */
+    void setEnvReader(final Function<String, String> reader) {
+        this.envReader = reader;
+    }
 
 
     /**
