@@ -5,6 +5,7 @@ import com.auth0.jwt.exceptions.JWTDecodeException;
 import com.azure.security.keyvault.secrets.SecretClient;
 import org.apache.http.HttpStatus;
 import org.opengroup.osdu.azure.di.AzureActiveDirectoryConfiguration;
+import org.opengroup.osdu.azure.di.LocalDevelopmentConfiguration;
 import org.opengroup.osdu.azure.di.PodIdentityConfiguration;
 import org.opengroup.osdu.azure.di.WorkloadIdentityConfiguration;
 import org.opengroup.osdu.azure.cache.AzureServicePrincipleTokenServiceCache;
@@ -12,10 +13,16 @@ import org.opengroup.osdu.core.common.model.http.AppException;
 import org.opengroup.osdu.core.common.model.search.IdToken;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Lazy;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.stereotype.Component;
 
 import jakarta.inject.Inject;
 import jakarta.inject.Named;
+
+import java.util.Arrays;
+import java.util.List;
+import java.util.function.Function;
 
 import static org.opengroup.osdu.azure.util.AuthUtils.getClientSecret;
 
@@ -47,6 +54,10 @@ public class AzureServicePrincipleTokenService {
     private AzureActiveDirectoryConfiguration aadConfiguration;
     @Autowired
     private SecretClient sc;
+    @Autowired
+    private Environment environment;
+    @Autowired(required = false)  // Optional - only exists when "local" profile is active
+    private LocalDevelopmentConfiguration localDevelopmentConfiguration;
 
     @Autowired
     private AzureServicePrincipal azureServicePrincipal;
@@ -55,6 +66,18 @@ public class AzureServicePrincipleTokenService {
     private AzureServicePrincipleTokenServiceCache tokenCache;
 
     private static final String MANAGEMENT_SCOPE = "https://management.azure.com/.default";
+
+    /** Environment variable reader; defaults to System::getenv. */
+    private Function<String, String> envReader = System::getenv;
+
+    /**
+     * Package-private setter for test injection without reflection.
+     *
+     * @param reader the environment variable reader to use
+     */
+    void setEnvReader(final Function<String, String> reader) {
+        this.envReader = reader;
+    }
 
 
     /**
@@ -70,6 +93,16 @@ public class AzureServicePrincipleTokenService {
      * @return service principle's authorization token
      */
     public String getAuthorizationToken(final String scope) {
+        // Evaluate local-dev mode eagerly so the security check runs BEFORE entering the
+        // try/catch block — this prevents IllegalStateException from being swallowed into
+        // the generic "Error generating token" error message.
+        final boolean useLocalDevCredentials = environment.acceptsProfiles(Profiles.of("local"))
+                && localDevelopmentConfiguration != null
+                && localDevelopmentConfiguration.getEnableLocalCredentials();
+        if (useLocalDevCredentials) {
+            assertNotCloudEnvironment();
+        }
+
         String accessToken = "";
         try {
             String cacheKey = "token:" + scope;
@@ -78,14 +111,19 @@ public class AzureServicePrincipleTokenService {
                 return cachedToken.getTokenValue();
             }
 
-            // 1. Try Workload Identity first (modern K8s method)
-            // 2. Try Pod Identity second (legacy K8s method)
-            // 3. Fallback to Service Principal with client secret
-            if (workloadIdentityConfiguration.getIsEnabled()) {
+            // 1. If running local mode, try development credentials (Azure CLI / IntelliJ)
+            // 2. Try Workload Identity first (modern K8s method)
+            // 3. Try Pod Identity second (legacy K8s method)
+            // 4. Fallback to Service Principal with client secret
+            // Note: local-dev path always requests the .default scope for the AAD client.
+            if (useLocalDevCredentials) {
+                accessToken = this.azureServicePrincipal.getLocalDevToken(aadClientId.concat("/.default"));
+            } else if (workloadIdentityConfiguration.getIsEnabled()) {
                 accessToken = this.azureServicePrincipal.getWIToken(aadClientId, scope);
             } else if (podIdentityConfiguration.getIsEnabled()) {
                 accessToken = this.azureServicePrincipal.getMSIToken(scope);
             } else {
+                // Fallback to Service Principal with client secret
                 try {
                     accessToken = this.azureServicePrincipal.getIdToken(clientID, clientSecret, tenantId, aadClientId);
                 } catch (AppException e) {
@@ -116,5 +154,35 @@ public class AzureServicePrincipleTokenService {
         }
 
         return accessToken;
+    }
+
+    /** Cloud and CI/CD environment variable indicators that must not be present on a developer workstation. */
+    private static final List<String> CLOUD_ENVIRONMENT_INDICATORS = Arrays.asList(
+            "KUBERNETES_SERVICE_HOST",
+            "WEBSITE_INSTANCE_ID",
+            "IDENTITY_ENDPOINT",
+            "MSI_ENDPOINT",
+            "CONTAINER_APP_NAME",
+            "FUNCTIONS_WORKER_RUNTIME",
+            "ACI_INSTANCE_NAME",
+            "CI",
+            "CONTINUOUS_INTEGRATION"
+    );
+
+    /**
+     * Asserts that the application is not running in a cloud or CI/CD environment.
+     * Called before every local-dev token acquisition so the check cannot be bypassed
+     * by bean-loading order or component-scan configuration.
+     *
+     * @throws IllegalStateException if a cloud or CI environment indicator is detected
+     */
+    private void assertNotCloudEnvironment() {
+        for (String indicator : CLOUD_ENVIRONMENT_INDICATORS) {
+            if (envReader.apply(indicator) != null) {
+                throw new IllegalStateException(
+                        "Refusing local-dev credentials: environment indicator '" + indicator + "' is set. "
+                        + "The 'local' profile must not be used outside of a developer workstation.");
+            }
+        }
     }
 }

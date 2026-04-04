@@ -35,6 +35,9 @@ import com.azure.identity.WorkloadIdentityCredentialBuilder;
 import java.time.Duration;
 import java.util.concurrent.TimeoutException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Class to generate the AAD authentication tokens using WorkloadIdentityCredential.
  *
@@ -46,6 +49,7 @@ import java.util.concurrent.TimeoutException;
 @Component
 public final class AzureServicePrincipal {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(AzureServicePrincipal.class);
     private static final int ERROR_STATUS_CODE = 500;
     private static final String ERROR_REASON = "Received empty token";
     private static final String ERROR_MESSAGE_SPN = "SPN client returned null token";
@@ -180,42 +184,44 @@ public final class AzureServicePrincipal {
     }
 
     /**
-     * Method to generate token using Workload Identity.
-     * @param app_resource_id The resource ID of the target application
-     * @return AUTHENTICATION TOKEN
-     */
-    public String getWIToken(final String app_resource_id) {
-        return getWIToken(app_resource_id, MANAGEMENT_SCOPE);
-    }
-
-    /**
      * Gets an authentication token using local development credentials with custom scope.
      *
-     * <p><strong>Note:</strong> This method is intended for local development only and is NOT part
-     * of the production runtime authentication flow. For production deployments, use Managed Identity
-     * ({@link #getMSIToken(String)}) or Workload Identity ({@link #getWIToken(String, String)}).</p>
-     *
-     * <p>This method uses a chained credential approach, attempting AzureCliCredential and
-     * IntelliJCredential in sequence to authenticate during local development.</p>
+     * <p><b>Note</b>: This method calls {@code .block()} on the reactive credential chain.
+     * It must not be invoked from a Reactor event-loop thread (e.g., WebFlux handlers).
      *
      * @param scope The scope to request
      * @return The authentication token string
      * @throws AppException if token acquisition fails or returns null
      */
     public String getLocalDevToken(final String scope) {
+        if (scope == null || scope.trim().isEmpty()) {
+            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON, "Scope must not be null or empty");
+        }
         try {
             ChainedTokenCredentialBuilder credentialBuilder = this.createLocalChainedTokenCredentialBuilder();
+
             ChainedTokenCredential chainedCredential = credentialBuilder.build();
 
+            String trimmedScope = scope.trim();
+            if (trimmedScope.contains(" ")) {
+                throw new AppException(ERROR_STATUS_CODE, ERROR_REASON, "Scope must not contain internal whitespace");
+            }
             TokenRequestContext requestContext = new TokenRequestContext();
-            requestContext.addScopes(scope);
+            requestContext.addScopes(trimmedScope);
 
-            AccessToken token = chainedCredential.getToken(requestContext).block();
+            AccessToken token = chainedCredential.getToken(requestContext).block(Duration.ofSeconds(30));
 
-            return extractTokenOrThrow(token, "Local development credential returned null token");
-        } catch (Exception e) {
+            if (token != null && token.getToken() != null) {
+                return token.getToken();
+            }
             throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
-                "Local development token acquisition failed: " + e.getMessage());
+                "Local development credential returned null token");
+        } catch (AppException e) {
+            throw e;
+        } catch (Exception e) {
+            LOGGER.warn("Local development token acquisition failed: {}", e.getMessage());
+            throw new AppException(ERROR_STATUS_CODE, ERROR_REASON,
+                "Local development token acquisition failed. Ensure 'az login' or IntelliJ Azure plugin is configured correctly.");
         }
     }
 
@@ -235,6 +241,15 @@ public final class AzureServicePrincipal {
         credentialBuilder.addLast(intelliJCredential);
 
         return credentialBuilder;
+    }
+
+    /**
+     * Method to generate token using Workload Identity.
+     * @param app_resource_id The resource ID of the target application
+     * @return AUTHENTICATION TOKEN
+     */
+    public String getWIToken(final String app_resource_id) {
+        return getWIToken(app_resource_id, MANAGEMENT_SCOPE);
     }
 
     /**
