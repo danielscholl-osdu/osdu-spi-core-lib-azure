@@ -71,7 +71,6 @@ The following software have components provided under the terms of this license:
 - JetBrains Java Annotations (from https://github.com/JetBrains/java-annotations)
 - Joda-Time (from http://joda-time.sourceforge.net, http://www.joda.org/joda-time/, https://www.joda.org/joda-time/)
 - Kotlin Stdlib (from https://kotlinlang.org/, https://repo1.maven.org/maven2/org/jetbrains/kotlin/kotlin-stdlib)
-- Kotlin Stdlib Common (from https://kotlinlang.org/)
 - Kotlin Stdlib Jdk7 (from <https://kotlinlang.org/>, https://kotlinlang.org/)
 - Kotlin Stdlib Jdk8 (from <https://kotlinlang.org/>, https://kotlinlang.org/)
 - Lettuce (from http://github.com/lettuce-io/lettuce-core, http://github.com/mp911de/lettuce/wiki, https://github.com/lettuce-io/lettuce-core/wiki, https://github.com/redis/lettuce)
@@ -321,6 +320,7 @@ The following software have components provided under the terms of this license:
 - msal4j (from https://github.com/AzureAD/microsoft-authentication-library-for-java)
 - msal4j-brokers (from https://github.com/AzureAD/microsoft-authentication-library-for-java)
 - msal4j-persistence-extension (from https://github.com/AzureAD/microsoft-authentication-extensions-for-java, https://github.com/AzureAD/microsoft-authentication-library-for-java)
+- redis-authx-core (from https://github.com/redis/redis-authx-core)
 
 ========================================================================
 cc-pd

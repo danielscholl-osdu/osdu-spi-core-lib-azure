@@ -242,9 +242,7 @@ public class CosmosStore {
             throw new AppException(404, errorMessage, e.getMessage(), e);
         } catch (CosmosException e) {
             statusCode = e.getStatusCode();
-            String errorMessage = "Unexpectedly failed to replace item into CosmosDB";
-            CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(errorMessage, e);
-            throw new AppException(500, errorMessage, e.getMessage(), e);
+            throw handleCosmosException(e, "Unexpectedly failed to replace item into CosmosDB");
         } finally {
             final long timeTaken = System.currentTimeMillis() - start;
             final String dependencyTarget = getDependencyTarget(dataPartitionId, cosmosDBName, collection);
@@ -661,9 +659,7 @@ public class CosmosStore {
             return Optional.empty();
         } catch (CosmosException e) {
             statusCode = e.getStatusCode();
-            String errorMessage = "Unexpectedly encountered error calling CosmosDB";
-            CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(errorMessage, e);
-            throw new AppException(500, errorMessage, e.getMessage(), e);
+            throw handleCosmosException(e, "Unexpectedly failed to read item from CosmosDB");
         } finally {
             final long timeTaken = System.currentTimeMillis() - start;
             final String dependencyTarget = DependencyLogger.getCosmosDependencyTarget(cosmosDBName, collection);
@@ -712,9 +708,7 @@ public class CosmosStore {
             throw new AppException(404, errorMessage, e.getMessage(), e);
         } catch (CosmosException e) {
             statusCode = e.getStatusCode();
-            String errorMessage = "Unexpectedly failed to delete item from CosmosDB";
-            CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(errorMessage, e);
-            throw new AppException(500, errorMessage, e.getMessage(), e);
+            throw handleCosmosException(e, "Unexpectedly failed to delete item from CosmosDB");
         } finally {
             final long timeTaken = System.currentTimeMillis() - start;
             final String dependencyTarget = DependencyLogger.getCosmosDependencyTarget(cosmosDBName, collection);
@@ -758,16 +752,7 @@ public class CosmosStore {
             CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).debug(String.format("UPSERT_ITEM with partition_key=%s", partitionKey));
         } catch (CosmosException e) {
             statusCode = e.getStatusCode();
-            if (statusCode == HttpStatus.SC_REQUEST_TOO_LONG) {
-                throw new AppException(HttpStatus.SC_REQUEST_TOO_LONG, REQUEST_TOO_LONG_ERROR_REASON, REQUEST_TOO_LONG_ERROR_MESSAGE, e);
-            }
-            if (statusCode == HttpStatus.SC_TOO_MANY_REQUESTS) {
-                throw new AppException(HttpStatus.SC_TOO_MANY_REQUESTS, TOO_MANY_REQUEST_ERROR_REASON, TOO_MANY_REQUEST_ERROR_MESSAGE, e);
-            } else {
-                String errorMessage = "Unexpectedly failed to put item into CosmosDB";
-                CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(errorMessage, e);
-                throw new AppException(500, errorMessage, e.getMessage(), e);
-            }
+            throw handleCosmosException(e, "Unexpectedly failed to put item into CosmosDB");
         } finally {
             final long timeTaken = System.currentTimeMillis() - start;
             final String dependencyTarget = DependencyLogger.getCosmosDependencyTarget(cosmosDBName, collection);
@@ -816,21 +801,7 @@ public class CosmosStore {
             throw new AppException(409, errorMessage, e.getMessage(), e);
         } catch (CosmosException e) {
             statusCode = e.getStatusCode();
-
-            // Handle request timeouts
-            if (statusCode == HttpStatus.SC_REQUEST_TIMEOUT) {
-                CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(REQUEST_TIMEOUT_ERROR_MESSAGE, e);
-                throw new AppException(HttpStatus.SC_REQUEST_TIMEOUT, REQUEST_TIMEOUT_ERROR_REASON, REQUEST_TIMEOUT_ERROR_MESSAGE, e);
-            }
-
-            // Handle throttling
-            if (statusCode == HttpStatus.SC_TOO_MANY_REQUESTS) {
-                throw new AppException(HttpStatus.SC_TOO_MANY_REQUESTS, TOO_MANY_REQUEST_ERROR_REASON, TOO_MANY_REQUEST_ERROR_MESSAGE, e);
-            }
-
-            String errorMessage = "Unexpectedly failed to insert item into CosmosDB";
-            CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(errorMessage, e);
-            throw new AppException(500, errorMessage, e.getMessage(), e);
+            throw handleCosmosException(e, "Unexpectedly failed to insert item into CosmosDB");
         } finally {
             final long timeTaken = System.currentTimeMillis() - start;
             final String dependencyTarget = DependencyLogger.getCosmosDependencyTarget(cosmosDBName, collection);
@@ -957,5 +928,28 @@ public class CosmosStore {
     private AppException handleCosmosStoreException(final int status, final String errorMessage, final Exception e) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(errorMessage, e);
         return new AppException(status, errorMessage, e.getMessage(), e);
+    }
+
+    /**
+     * Handles CosmosException by checking for specific error codes and throwing appropriate AppException.
+     *
+     * @param e              The CosmosException to handle
+     * @param errorMessage   The error message to use for unexpected errors
+     * @return Never returns, always throws AppException
+     * @throws AppException Always thrown with appropriate status code
+     */
+    private AppException handleCosmosException(final CosmosException e, final String errorMessage) {
+        int statusCode = e.getStatusCode();
+        if (statusCode == HttpStatus.SC_REQUEST_TOO_LONG) {
+            throw new AppException(HttpStatus.SC_REQUEST_TOO_LONG, REQUEST_TOO_LONG_ERROR_REASON, REQUEST_TOO_LONG_ERROR_MESSAGE, e);
+        }
+        if (statusCode == HttpStatus.SC_TOO_MANY_REQUESTS) {
+            throw new AppException(HttpStatus.SC_TOO_MANY_REQUESTS, TOO_MANY_REQUEST_ERROR_REASON, TOO_MANY_REQUEST_ERROR_MESSAGE, e);
+        }
+        if (statusCode == HttpStatus.SC_REQUEST_TIMEOUT) {
+            throw new AppException(HttpStatus.SC_REQUEST_TIMEOUT, REQUEST_TIMEOUT_ERROR_REASON, REQUEST_TIMEOUT_ERROR_MESSAGE, e);
+        }
+        CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).warn(errorMessage, e);
+        throw new AppException(500, errorMessage, e.getMessage(), e);
     }
 }

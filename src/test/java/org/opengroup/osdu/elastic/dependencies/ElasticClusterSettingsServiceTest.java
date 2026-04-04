@@ -31,6 +31,8 @@ import jakarta.inject.Provider;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -55,13 +57,25 @@ class ElasticClusterSettingsServiceTest {
     @InjectMocks
     private ElasticClusterSettingsService esSettingsService;
 
-    void mockTenant(String tenantName) {
+    void mockTenantWithRequestScope(String tenantName) {
         TenantInfo tenant = new TenantInfo();
         tenant.setName(tenantName);
+        tenant.setDataPartitionId(tenantName);
         ITenantInfoService tenantService = mock(ITenantInfoService.class);
 
         doReturn(tenantService).when(tenantProvider).get();
         doReturn(tenant).when(tenantService).getTenantInfo();
+        doReturn(tenant).when(tenantService).getTenantInfoForPartition(tenantName);
+    }
+
+    void mockTenantByPartitionId(String tenantName) {
+        TenantInfo tenant = new TenantInfo();
+        tenant.setName(tenantName);
+        tenant.setDataPartitionId(tenantName);
+        ITenantInfoService tenantService = mock(ITenantInfoService.class);
+
+        doReturn(tenantService).when(tenantProvider).get();
+        doReturn(tenant).when(tenantService).getTenantInfoForPartition(tenantName);
     }
 
     void mockMultiTenants(List<String> dataPartitionIDs){
@@ -79,15 +93,16 @@ class ElasticClusterSettingsServiceTest {
         }
         doReturn(tenantInfos).when(tenantService).getAllTenantInfos();
     }
+
     @Test
-    void get_willCacheBasedOnTenantName(){
+    void get_willCacheBasedOnTenantName() {
         doReturn(mock(ClusterSettings.class)).when(esRepo).getElasticClusterSettings(any());
 
-        mockTenant("t1");
+        mockTenantWithRequestScope("t1");
         esSettingsService.getElasticClusterInformation();
         esSettingsService.getElasticClusterInformation();
 
-        mockTenant("t2");
+        mockTenantWithRequestScope("t2");
         esSettingsService.getElasticClusterInformation();
         esSettingsService.getElasticClusterInformation();
 
@@ -100,5 +115,32 @@ class ElasticClusterSettingsServiceTest {
         mockMultiTenants(Arrays.asList("t1", "t2", "t3"));
         esSettingsService.getAllClustersSettings();
         verify(esRepo, times(3)).getElasticClusterSettings(any());
+    }
+
+    @Test
+    void getElasticClusterInformationForPartition_willReturnCorrectSettingsForPartition() {
+        ClusterSettings expectedSettings = mock(ClusterSettings.class);
+        doReturn(expectedSettings).when(esRepo).getElasticClusterSettings(any());
+
+        mockTenantByPartitionId("t1");
+        ClusterSettings result = esSettingsService.getElasticClusterInformationForPartition("t1");
+
+        verify(esRepo, times(1)).getElasticClusterSettings(any());
+        assertEquals(expectedSettings, result);
+    }
+
+    @Test
+    void getElasticClusterInformationForPartition_willCacheBasedOnPartitionId() {
+        doReturn(mock(ClusterSettings.class)).when(esRepo).getElasticClusterSettings(any());
+
+        mockTenantByPartitionId("t1");
+        esSettingsService.getElasticClusterInformationForPartition("t1");
+        esSettingsService.getElasticClusterInformationForPartition("t1");
+
+        mockTenantByPartitionId("t2");
+        esSettingsService.getElasticClusterInformationForPartition("t2");
+        esSettingsService.getElasticClusterInformationForPartition("t2");
+
+        verify(esRepo, times(2)).getElasticClusterSettings(any());
     }
 }

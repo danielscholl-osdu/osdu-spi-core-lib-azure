@@ -40,4 +40,12 @@ class GraphServiceClientFactoryTest {
             sut.getGraphServiceClient(null);
         });
     }
+
+    @Test
+    void initialize_createsEmptyMap() {
+        sut.initialize();
+        // After initialize, getting a client should create one via computeIfAbsent on a real map
+        GraphServiceClient client = sut.getGraphServiceClient("test-partition");
+        assertNotNull(client);
+    }
 }

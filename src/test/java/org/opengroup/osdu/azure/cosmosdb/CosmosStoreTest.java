@@ -68,6 +68,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.opengroup.osdu.azure.cosmosdb.CosmosStoreBulkOperations.TOO_MANY_REQUEST_ERROR_MESSAGE;
 import static org.opengroup.osdu.azure.cosmosdb.CosmosStoreBulkOperations.TOO_MANY_REQUEST_ERROR_REASON;
+import static org.opengroup.osdu.azure.cosmosdb.CosmosStoreBulkOperations.REQUEST_TOO_LONG_ERROR_MESSAGE;
+import static org.opengroup.osdu.azure.cosmosdb.CosmosStoreBulkOperations.REQUEST_TOO_LONG_ERROR_REASON;
 import static org.opengroup.osdu.azure.cosmosdb.CosmosStore.REQUEST_TIMEOUT_ERROR_MESSAGE;
 import static org.opengroup.osdu.azure.cosmosdb.CosmosStore.REQUEST_TIMEOUT_ERROR_REASON;
 import static org.opengroup.osdu.azure.logging.DependencyType.COSMOS_STORE;
@@ -231,6 +233,75 @@ class CosmosStoreTest {
     }
 
     @Test
+    void delete_throws429_ifThrottledException() throws CosmosException {
+        // Arrange
+        CosmosException throttleException = mock(CosmosException.class);
+        when(throttleException.getStatusCode()).thenReturn(HttpStatus.SC_TOO_MANY_REQUESTS);
+        doThrow(throttleException).when(container).deleteItem(any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.deleteItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY);
+        });
+
+        assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, exception.getError().getCode());
+        assertEquals(TOO_MANY_REQUEST_ERROR_REASON, exception.getError().getReason());
+        assertEquals(TOO_MANY_REQUEST_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "DELETE_ITEM", "id=id partition_key=pk", "cosmosdb/collection", 429, false);
+    }
+
+    @Test
+    void delete_throws413_ifRequestTooLong() throws CosmosException {
+        // Arrange
+        CosmosException requestTooLongException = mock(CosmosException.class);
+        when(requestTooLongException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TOO_LONG);
+        doThrow(requestTooLongException).when(container).deleteItem(any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.deleteItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY);
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TOO_LONG, exception.getError().getCode());
+        assertEquals(REQUEST_TOO_LONG_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TOO_LONG_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "DELETE_ITEM", "id=id partition_key=pk", "cosmosdb/collection", 413, false);
+    }
+
+    @Test
+    void delete_throws408_ifRequestTimeout() throws CosmosException {
+        // Arrange
+        CosmosException timeoutException = mock(CosmosException.class);
+        when(timeoutException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TIMEOUT);
+        doThrow(timeoutException).when(container).deleteItem(any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.deleteItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY);
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TIMEOUT, exception.getError().getCode());
+        assertEquals(REQUEST_TIMEOUT_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TIMEOUT_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "DELETE_ITEM", "id=id partition_key=pk", "cosmosdb/collection", 408, false);
+    }
+
+    @Test
     void findItem_returnsEmpty_ifNotFound() throws CosmosException {
         doThrow(NotFoundException.class).when(container).readItem(any(), any(), any(), any());
         assertFalse(cosmosStore.findItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY, any(Class.class)).isPresent());
@@ -274,6 +345,75 @@ class CosmosStoreTest {
             cosmosStore.findItem(COSMOS_DB, COLLECTION, ID, PARTITION_KEY, any(Class.class));
         });
         assertEquals(500, exception.getError().getCode());
+    }
+
+    @Test
+    void findItem_throws429_ifThrottledException() throws CosmosException {
+        // Arrange
+        CosmosException throttleException = mock(CosmosException.class);
+        when(throttleException.getStatusCode()).thenReturn(HttpStatus.SC_TOO_MANY_REQUESTS);
+        doThrow(throttleException).when(container).readItem(any(), any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.findItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY, Object.class);
+        });
+
+        assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, exception.getError().getCode());
+        assertEquals(TOO_MANY_REQUEST_ERROR_REASON, exception.getError().getReason());
+        assertEquals(TOO_MANY_REQUEST_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "READ_ITEM", "id=id partition_key=pk", "cosmosdb/collection", 429, false);
+    }
+
+    @Test
+    void findItem_throws413_ifRequestTooLong() throws CosmosException {
+        // Arrange
+        CosmosException requestTooLongException = mock(CosmosException.class);
+        when(requestTooLongException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TOO_LONG);
+        doThrow(requestTooLongException).when(container).readItem(any(), any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.findItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY, Object.class);
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TOO_LONG, exception.getError().getCode());
+        assertEquals(REQUEST_TOO_LONG_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TOO_LONG_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "READ_ITEM", "id=id partition_key=pk", "cosmosdb/collection", 413, false);
+    }
+
+    @Test
+    void findItem_throws408_ifRequestTimeout() throws CosmosException {
+        // Arrange
+        CosmosException timeoutException = mock(CosmosException.class);
+        when(timeoutException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TIMEOUT);
+        doThrow(timeoutException).when(container).readItem(any(), any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.findItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY, Object.class);
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TIMEOUT, exception.getError().getCode());
+        assertEquals(REQUEST_TIMEOUT_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TIMEOUT_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "READ_ITEM", "id=id partition_key=pk", "cosmosdb/collection", 408, false);
     }
 
     @Test
@@ -325,6 +465,29 @@ class CosmosStoreTest {
     }
 
     @Test
+    void upsertItem_throws408_ifRequestTimeout() throws CosmosException {
+        // Arrange
+        CosmosException timeoutException = mock(CosmosException.class);
+        when(timeoutException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TIMEOUT);
+        doThrow(timeoutException).when(container).upsertItem(any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.upsertItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, PARTITION_KEY_SOME_DATA, "test-data");
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TIMEOUT, exception.getError().getCode());
+        assertEquals(REQUEST_TIMEOUT_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TIMEOUT_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "UPSERT_ITEM", "partition_key=some-data", "cosmosdb/collection", 408, false);
+    }
+
+    @Test
     void replaceItem_throws500_ifUnknownError() throws CosmosException {
         ArgumentCaptor<PartitionKey> partitionKeyArgumentCaptor = ArgumentCaptor.forClass(PartitionKey.class);
         doThrow(CosmosException.class).when(container).replaceItem(eq(ITEM), eq(ID), partitionKeyArgumentCaptor.capture(), any(CosmosItemRequestOptions.class));
@@ -372,6 +535,81 @@ class CosmosStoreTest {
         verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
         DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
         verifyDependencyLogging(actualLoggingOptions, "REPLACE_ITEM", "id=id partition_key=pk", "data-partition-id:cosmosdb/collection", 200, true);
+    }
+
+    @Test
+    void replaceItem_throws429_ifThrottledException() throws CosmosException {
+        // Arrange
+        CosmosException throttleException = mock(CosmosException.class);
+        when(throttleException.getStatusCode()).thenReturn(HttpStatus.SC_TOO_MANY_REQUESTS);
+        ArgumentCaptor<PartitionKey> partitionKeyArgumentCaptor = ArgumentCaptor.forClass(PartitionKey.class);
+        doThrow(throttleException).when(container).replaceItem(eq(ITEM), eq(ID), partitionKeyArgumentCaptor.capture(), any(CosmosItemRequestOptions.class));
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.replaceItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY, ITEM);
+        });
+
+        assertEquals(HttpStatus.SC_TOO_MANY_REQUESTS, exception.getError().getCode());
+        assertEquals(TOO_MANY_REQUEST_ERROR_REASON, exception.getError().getReason());
+        assertEquals(TOO_MANY_REQUEST_ERROR_MESSAGE, exception.getError().getMessage());
+        verify(container).replaceItem(eq(ITEM), eq(ID), any(PartitionKey.class), any(CosmosItemRequestOptions.class));
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "REPLACE_ITEM", "id=id partition_key=pk", "data-partition-id:cosmosdb/collection", 429, false);
+    }
+
+    @Test
+    void replaceItem_throws413_ifRequestTooLong() throws CosmosException {
+        // Arrange
+        CosmosException requestTooLongException = mock(CosmosException.class);
+        when(requestTooLongException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TOO_LONG);
+        ArgumentCaptor<PartitionKey> partitionKeyArgumentCaptor = ArgumentCaptor.forClass(PartitionKey.class);
+        doThrow(requestTooLongException).when(container).replaceItem(eq(ITEM), eq(ID), partitionKeyArgumentCaptor.capture(), any(CosmosItemRequestOptions.class));
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.replaceItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY, ITEM);
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TOO_LONG, exception.getError().getCode());
+        assertEquals(REQUEST_TOO_LONG_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TOO_LONG_ERROR_MESSAGE, exception.getError().getMessage());
+        verify(container).replaceItem(eq(ITEM), eq(ID), any(PartitionKey.class), any(CosmosItemRequestOptions.class));
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "REPLACE_ITEM", "id=id partition_key=pk", "data-partition-id:cosmosdb/collection", 413, false);
+    }
+
+    @Test
+    void replaceItem_throws408_ifRequestTimeout() throws CosmosException {
+        // Arrange
+        CosmosException timeoutException = mock(CosmosException.class);
+        when(timeoutException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TIMEOUT);
+        ArgumentCaptor<PartitionKey> partitionKeyArgumentCaptor = ArgumentCaptor.forClass(PartitionKey.class);
+        doThrow(timeoutException).when(container).replaceItem(eq(ITEM), eq(ID), partitionKeyArgumentCaptor.capture(), any(CosmosItemRequestOptions.class));
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.replaceItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, ID, PARTITION_KEY, ITEM);
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TIMEOUT, exception.getError().getCode());
+        assertEquals(REQUEST_TIMEOUT_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TIMEOUT_ERROR_MESSAGE, exception.getError().getMessage());
+        verify(container).replaceItem(eq(ITEM), eq(ID), any(PartitionKey.class), any(CosmosItemRequestOptions.class));
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "REPLACE_ITEM", "id=id partition_key=pk", "data-partition-id:cosmosdb/collection", 408, false);
     }
 
     @Test
@@ -435,7 +673,7 @@ class CosmosStoreTest {
         verifyDependencyLogging(actualLoggingOptions, "CREATE_ITEM", "partition_key=some-data", "cosmosdb/collection", 200, true);
     }
 
-     @Test
+    @Test
     void createItem_throws408_ifRequestTimeoutException() throws CosmosException {
         // Arrange
         CosmosException timeoutException = mock(CosmosException.class);
@@ -479,6 +717,29 @@ class CosmosStoreTest {
         verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
         DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
         verifyDependencyLogging(actualLoggingOptions, "CREATE_ITEM", "partition_key=some-data", "cosmosdb/collection", 429, false);
+    }
+
+    @Test
+    void createItem_throws413_ifRequestTooLong() throws CosmosException {
+        // Arrange
+        CosmosException requestTooLongException = mock(CosmosException.class);
+        when(requestTooLongException.getStatusCode()).thenReturn(HttpStatus.SC_REQUEST_TOO_LONG);
+        doThrow(requestTooLongException).when(container).createItem(any(), any(), any());
+
+        // Act & Assert
+        AppException exception = assertThrows(AppException.class, () -> {
+            cosmosStore.createItem(DATA_PARTITION_ID, COSMOS_DB, COLLECTION, PARTITION_KEY_SOME_DATA, "test-data");
+        });
+
+        assertEquals(HttpStatus.SC_REQUEST_TOO_LONG, exception.getError().getCode());
+        assertEquals(REQUEST_TOO_LONG_ERROR_REASON, exception.getError().getReason());
+        assertEquals(REQUEST_TOO_LONG_ERROR_MESSAGE, exception.getError().getMessage());
+
+        // Verify dependency logging
+        ArgumentCaptor<DependencyLoggingOptions> loggingOptionsArgumentCaptor = ArgumentCaptor.forClass(DependencyLoggingOptions.class);
+        verify(dependencyLogger, times(1)).logDependency(loggingOptionsArgumentCaptor.capture());
+        DependencyLoggingOptions actualLoggingOptions = loggingOptionsArgumentCaptor.getValue();
+        verifyDependencyLogging(actualLoggingOptions, "CREATE_ITEM", "partition_key=some-data", "cosmosdb/collection", 413, false);
     }
 
     @Test

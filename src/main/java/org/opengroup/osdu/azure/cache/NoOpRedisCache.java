@@ -6,26 +6,25 @@ import org.opengroup.osdu.core.common.cache.IRedisCache;
 
 /**
  * Redis cache client that does nothing!
- * @param <K> keyClass
  * @param <V> valueClass
  */
-public final class NoOpRedisCache<K, V> implements IRedisCache<K, V> {
+public final class NoOpRedisCache<V> implements IRedisCache<String, V> {
 
     private static final String LOGGER_NAME = NoOpRedisCache.class.getName();
 
     @Override
-    public void put(final K k, final V o) {
+    public void put(final String k, final V o) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - put");
     }
 
     @Override
-    public V get(final K k) {
+    public V get(final String k) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - get");
         return null;
     }
 
     @Override
-    public void delete(final K k) {
+    public void delete(final String k) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - delete");
     }
 
@@ -35,18 +34,18 @@ public final class NoOpRedisCache<K, V> implements IRedisCache<K, V> {
     }
 
     @Override
-    public void put(final K k, final long l, final V o) {
+    public void put(final String k, final long l, final V o) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - put with ttl");
     }
 
     @Override
-    public boolean updateTtl(final K k, final long l) {
+    public boolean updateTtl(final String k, final long l) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - updateTtl");
         return false;
     }
 
     @Override
-    public Long getTtl(final K k) {
+    public Long getTtl(final String k) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - getTtl");
         return 0L;
     }
@@ -58,31 +57,31 @@ public final class NoOpRedisCache<K, V> implements IRedisCache<K, V> {
     }
 
     @Override
-    public Long increment(final K k) {
+    public Long increment(final String k) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - increment");
         return null;
     }
 
     @Override
-    public Long incrementBy(final K k, final long l) {
+    public Long incrementBy(final String k, final long l) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - incrementBy");
         return null;
     }
 
     @Override
-    public Long decrement(final K k) {
+    public Long decrement(final String k) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - decrement");
         return null;
     }
 
     @Override
-    public Long decrementBy(final K k, final long l) {
+    public Long decrementBy(final String k, final long l) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - decrementBy");
         return null;
     }
 
     @Override
-    public RedisCodec<K, V> getCodec(final Class<K> aClass, final Class<V> aClass1) {
+    public RedisCodec<String, V> getCodec(final Class<String> aClass, final Class<V> aClass1) {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - getCodec");
         return null;
     }

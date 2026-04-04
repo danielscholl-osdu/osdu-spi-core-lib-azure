@@ -42,33 +42,33 @@
     <repos.id>os-core</repos.id>
     <repos.url>https://pkgs.dev.azure.com/slb-des-ext-collaboration/_packaging/os-core/maven/v1</repos.url>
 
-    <osdu.oscorecommon.version>3.6.2</osdu.oscorecommon.version>
+    <osdu.oscorecommon.version>5.4.1</osdu.oscorecommon.version>
+    <jackson.version>2.21.1</jackson.version>
 
-    <!-- Spring Boot Framework 6.2.12 compatible with Spring Boot 3.5.6 -->
-    <!-- https://spring.io/blog/2024/11/14/spring-framework-6-2-0-available-now -->
-    <!-- https://docs.spring.io/spring-boot/3.5.7/system-requirements.html -->
-    <spring-framework.version>6.2.12</spring-framework.version>
-    <spring-boot-dependencies.version>3.5.7</spring-boot-dependencies.version>
+    <!-- Spring Boot 3.5.9 provides Netty 4.1.130.Final which fixes CVE-2025-67735 -->
+    <!-- Spring Framework 6.2.15 is compatible with Spring Boot 3.5.9 -->
+    <spring-framework.version>6.2.15</spring-framework.version>
+    <spring-boot-dependencies.version>3.5.9</spring-boot-dependencies.version>
 
-    <azure-sdk-bom.version>1.2.38</azure-sdk-bom.version>
-    <azure-spring-boot.version>5.22.0</azure-spring-boot.version>
-    <springdoc-openapi-starter-webmvc-ui.version>2.8.9</springdoc-openapi-starter-webmvc-ui.version>
+    <azure-sdk-bom.version>1.3.3</azure-sdk-bom.version>
+    <azure-spring-boot.version>5.24.0</azure-spring-boot.version>
+    <springdoc-openapi-starter-webmvc-ui.version>2.8.14</springdoc-openapi-starter-webmvc-ui.version>
 
-    <microsoft-graph.version>6.46.0</microsoft-graph.version>
-    <azure.appinsights.version>3.7.3</azure.appinsights.version>
+    <microsoft-graph.version>6.58.0</microsoft-graph.version>
+    <azure.appinsights.version>3.7.6</azure.appinsights.version>
     <azure-servicebus.version>3.6.7</azure-servicebus.version>
     <azure-eventgrid.version>1.4.0</azure-eventgrid.version>
     <azure-mgmt-eventgrid.version>1.0.0-beta-4</azure-mgmt-eventgrid.version>
 
     <!-- Misc Library Versions -->
-    <io.micrometer.version>1.15.5</io.micrometer.version>
+    <io.micrometer.version>1.15.6</io.micrometer.version>
     <jakarta.servlet.version>6.1.0</jakarta.servlet.version>
     <jakarta.inject.version>2.0.1</jakarta.inject.version>
     <json.version>20250517</json.version>
-    <log4j-slf4j-impl.version>2.25.1</log4j-slf4j-impl.version>
+    <log4j-slf4j-impl.version>2.25.3</log4j-slf4j-impl.version>
     <resilience4j.version>2.3.0</resilience4j.version>
     <redisson.version>3.52.0</redisson.version>
-    <guava.version>33.4.8-jre</guava.version>
+    <guava.version>33.5.0-jre</guava.version>
 
     <!-- Plugin Versions -->
     <surefire-plugin.version>3.5.4</surefire-plugin.version>
@@ -81,6 +81,16 @@
   <dependencyManagement>
     <dependencies>
       <!-- BOMs listed in the order of their dependency hierarchy or importance.  -->
+
+      <!-- Jackson override: Spring Boot 3.5.9 provides 2.19.4, we need 2.21.1 for GHSA-72hv-8253-57qq -->
+      <!-- Remove this override when Spring Boot BOM updates to Jackson >= 2.21.1 -->
+      <dependency>
+        <groupId>com.fasterxml.jackson</groupId>
+        <artifactId>jackson-bom</artifactId>
+        <version>${jackson.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>org.springframework</groupId>
         <artifactId>spring-framework-bom</artifactId>
@@ -107,18 +117,14 @@
           <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
           <version>${springdoc-openapi-starter-webmvc-ui.version}</version>
       </dependency>
-      <!--
-        Netty BOM Fix CVE-2025-58056, CVE-2025-58057, CVE-2025-55163
-        Override Spring Boot 3.5.3's Netty version (4.1.122.Final) to fix multiple codec vulnerabilities.
-        This needs to be imported BEFORE Spring Boot dependencies to take precedence.
-        This can be removed when Spring Boot updates to Netty 4.1.125.Final or later.
-      -->
+      <!-- Log4j override: Spring Boot 3.5.9 provides 2.24.3, we need 2.25.3 for CVE-2025-68161 -->
+      <!-- Remove this override when Spring Boot BOM updates to Log4j >= 2.25.3 -->
       <dependency>
-          <groupId>io.netty</groupId>
-          <artifactId>netty-bom</artifactId>
-          <version>4.1.125.Final</version>
-          <type>pom</type>
-          <scope>import</scope>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-bom</artifactId>
+        <version>2.25.3</version>
+        <type>pom</type>
+        <scope>import</scope>
       </dependency>
       <dependency>
         <groupId>org.springframework.boot</groupId>
@@ -140,57 +146,51 @@
       <dependency>
         <groupId>com.nimbusds</groupId>
         <artifactId>nimbus-jose-jwt</artifactId>
-        <version>10.0.2</version>
-      </dependency>
-      <dependency>
-        <groupId>io.projectreactor.netty</groupId>
-        <artifactId>reactor-netty-http</artifactId>
-        <version>1.2.8</version>
+        <version>10.6</version>
       </dependency>
       <dependency>
         <groupId>org.apache.commons</groupId>
         <artifactId>commons-lang3</artifactId>
-        <version>3.18.0</version>
+        <version>3.20.0</version>
       </dependency>
       <!--
-        commons-lang3 Fix CVE-2025-48924
-        Override Spring Boot 3.5.3's commons-lang3 version to fix uncontrolled recursion vulnerability.
-        This can be removed when Spring Boot updates to commons-lang3 3.18.0 or later.
-      -->
-      <dependency>
-          <groupId>org.apache.commons</groupId>
-          <artifactId>commons-lang3</artifactId>
-          <version>3.18.0</version>
-      </dependency>
-      <!--
-        lettuce-core Fix CVE-2024-47535
-        Spring Boot 3.4.10 still references lettuce-core 6.4.2.RELEASE.
-        Remove when spring-boot-dependencies references a version of lettuce-core >= 6.5.1.RELEASE.
+        lettuce-core upgraded to 6.8.1 for RedisCredentialsProvider support
+        Enables automatic MSI token refresh without manual connection recreation.
       -->
       <dependency>
           <groupId>io.lettuce</groupId>
           <artifactId>lettuce-core</artifactId>
-          <version>6.5.5.RELEASE</version>
+          <version>6.8.1.RELEASE</version>
       </dependency>
       <!--
-        nimbus-jose-jwt Fix CVE-2025-53864
-        Security vulnerability fix for deeply nested JSON object DOS attack.
-        Remove explicit version when upstream dependencies include 9.37.4 or later.
+        OkHttp 3.x override: azure-mgmt-eventgrid chain brings 3.12.2 which has known CVEs.
+        Upgrade to latest 3.x (3.14.9). Cannot go to 4.x due to API changes in legacy chain.
+        Remove when azure-mgmt-eventgrid dependency is migrated.
       -->
       <dependency>
-          <groupId>com.nimbusds</groupId>
-          <artifactId>nimbus-jose-jwt</artifactId>
-          <version>9.37.4</version>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>okhttp</artifactId>
+        <version>3.14.9</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>logging-interceptor</artifactId>
+        <version>3.14.9</version>
+      </dependency>
+      <dependency>
+        <groupId>com.squareup.okhttp3</groupId>
+        <artifactId>okhttp-urlconnection</artifactId>
+        <version>3.14.9</version>
       </dependency>
       <!--
         reactor-netty-http Fix CVE-2025-22227
         Security vulnerability fix for credential leaks in chained redirects.
-        Remove explicit version when spring-boot-dependencies includes 1.2.8 or later.
+        Remove explicit version when spring-boot-dependencies includes 1.2.12 or later.
       -->
       <dependency>
           <groupId>io.projectreactor.netty</groupId>
           <artifactId>reactor-netty-http</artifactId>
-          <version>1.2.8</version>
+          <version>1.2.12</version>
       </dependency>
     </dependencies>
   </dependencyManagement>
@@ -289,7 +289,6 @@
     <dependency>
       <groupId>com.azure</groupId>
       <artifactId>azure-spring-data-cosmos</artifactId>
-      <!-- Version managed by spring-cloud-azure-dependencies BOM -->
     </dependency>
     <dependency>
       <groupId>com.microsoft.graph</groupId>
@@ -397,7 +396,6 @@
     <dependency>
       <groupId>org.projectlombok</groupId>
       <artifactId>lombok</artifactId>
-      <!-- Version managed by spring-cloud-azure-dependencies BOM -->
     </dependency>
 
     <!-- Test Scoped Libraries -->
@@ -429,7 +427,7 @@
       <!-- Comes from com.microsoft.azure:azure-eventgrid:jar:1.4.0 -->
       <groupId>commons-io</groupId>
       <artifactId>commons-io</artifactId>
-      <version>2.20.0</version>
+      <version>2.21.0</version>
     </dependency>
   </dependencies>
 
