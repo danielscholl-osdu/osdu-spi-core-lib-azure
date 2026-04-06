@@ -1,7 +1,7 @@
 package org.opengroup.osdu.azure.filters;
 
 import com.microsoft.applicationinsights.internal.util.MapUtil;
-import com.microsoft.applicationinsights.telemetry.RequestTelemetry;
+import com.microsoft.applicationinsights.web.internal.RequestTelemetryContext;
 import com.microsoft.applicationinsights.web.internal.ThreadContext;
 import jakarta.servlet.Filter;
 import jakarta.servlet.FilterChain;
@@ -23,8 +23,12 @@ import java.io.IOException;
 public final class LogCustomDimensionFilter implements Filter {
     @Override
     public void doFilter(final ServletRequest servletRequest, final ServletResponse servletResponse, final FilterChain filterChain) throws IOException, ServletException {
-        RequestTelemetry requestTelemetry = ThreadContext.getRequestTelemetryContext().getHttpRequestTelemetry();
-        MapUtil.copy(MDC.getCopyOfContextMap(), requestTelemetry.getProperties());
+        // ThreadContext is only populated when the Application Insights JVM agent is loaded at startup.
+        // Guard against null to allow the service to run without the agent (e.g. local dev, community deployments).
+        RequestTelemetryContext telemetryContext = ThreadContext.getRequestTelemetryContext();
+        if (telemetryContext != null) {
+            MapUtil.copy(MDC.getCopyOfContextMap(), telemetryContext.getHttpRequestTelemetry().getProperties());
+        }
         filterChain.doFilter(servletRequest, servletResponse);
     }
 }
