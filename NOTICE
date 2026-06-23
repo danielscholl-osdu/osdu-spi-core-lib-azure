@@ -82,9 +82,13 @@ The following software have components provided under the terms of this license:
 - Netty Reactive Streams Implementation (from https://repo1.maven.org/maven2/com/typesafe/netty/netty-reactive-streams)
 - Netty/Buffer (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-buffer)
 - Netty/Codec (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-codec)
+- Netty/Codec/Base (from https://netty.io/)
+- Netty/Codec/Compression (from https://netty.io/)
 - Netty/Codec/DNS (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-codec-dns)
 - Netty/Codec/HTTP (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-codec-http)
 - Netty/Codec/HTTP2 (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-codec-http2)
+- Netty/Codec/Marshalling (from https://netty.io/)
+- Netty/Codec/Protobuf (from https://netty.io/)
 - Netty/Codec/Socks (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-codec-socks)
 - Netty/Common (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-common)
 - Netty/Handler (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-handler)
@@ -327,7 +331,7 @@ cc-pd
 The following software have components provided under the terms of this license:
 
 - Guava: Google Core Libraries for Java (from http://code.google.com/p/guava-libraries, https://github.com/google/guava, https://repo1.maven.org/maven2/com/google/guava/guava)
-- Netty/Codec (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-codec)
+- Netty/Codec/Base (from https://netty.io/)
 
 ========================================================================
 gpl-2.0-classpath

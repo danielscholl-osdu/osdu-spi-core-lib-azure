@@ -81,6 +81,14 @@
   <dependencyManagement>
     <dependencies>
       <!-- BOMs listed in the order of their dependency hierarchy or importance.  -->
+      <!-- netty-bom MUST be first to take precedence over transitively-imported BOMs and resolve CVEs -->
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-bom</artifactId>
+        <version>${netty-bom.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
       <dependency>
         <groupId>com.azure</groupId>
         <artifactId>azure-sdk-bom</artifactId>
