@@ -44,6 +44,9 @@
 
     <osdu.oscorecommon.version>5.4.1</osdu.oscorecommon.version>
 
+    <!-- Netty BOM pinned to pull CVE fixes (netty 4.2.15.Final) since transitively-imported BOMs don't transit through os-core-common -->
+    <netty-bom.version>4.2.15.Final</netty-bom.version>
+
     <!-- Spring Boot 3.5.13 provides Netty 4.1.132.Final which fixes CVE-2025-67735 -->
     <spring-boot-dependencies.version>3.5.13</spring-boot-dependencies.version>
 
