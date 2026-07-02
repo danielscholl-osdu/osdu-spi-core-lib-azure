@@ -47,7 +47,6 @@ The following software have components provided under the terms of this license:
 - HTTP functionality for the Reactor Netty library (from https://github.com/reactor/reactor-netty)
 - Hibernate Validator (from https://hibernate.org/validator, https://repo1.maven.org/maven2/org/hibernate/hibernate-validator, https://repo1.maven.org/maven2/org/hibernate/validator/hibernate-validator)
 - J2ObjC Annotations (from https://github.com/google/j2objc/)
-- Jakarta Dependency Injection (from https://github.com/eclipse-ee4j/injection-api)
 - JBoss Logging 3 (from http://www.jboss.org, https://www.jboss.org/)
 - JCIP Annotations under Apache License (from http://stephenc.github.com/jcip-annotations)
 - JJWT :: API (from https://github.com/jwtk/jjwt)
@@ -64,6 +63,7 @@ The following software have components provided under the terms of this license:
 - Jackson-core (from http://wiki.fasterxml.com/JacksonHome, https://github.com/FasterXML/jackson-core)
 - Jackson-dataformat-YAML (from https://github.com/FasterXML/jackson, https://github.com/FasterXML/jackson-dataformats-text)
 - Jackson-module-parameter-names (from https://github.com/FasterXML/jackson-modules-java8, https://repo1.maven.org/maven2/com/fasterxml/jackson/module/jackson-module-parameter-names)
+- Jakarta Dependency Injection (from https://github.com/eclipse-ee4j/injection-api)
 - Jakarta Servlet (from https://projects.eclipse.org/projects/ee4j.servlet)
 - Jakarta Validation API (from https://beanvalidation.org, https://beanvalidation.org/)
 - Java Native Access (from https://github.com/java-native-access/jna, https://github.com/twall/jna)
@@ -163,6 +163,7 @@ The following software have components provided under the terms of this license:
 
 - Apache Log4j Core (from https://repo1.maven.org/maven2/org/apache/logging/log4j/log4j-core)
 - HdrHistogram (from http://hdrhistogram.github.io/HdrHistogram/)
+- Jackson-core (from http://wiki.fasterxml.com/JacksonHome, https://github.com/FasterXML/jackson-core)
 - Jodd Util (from https://util.jodd.org/)
 - LatencyUtils (from http://latencyutils.github.io/LatencyUtils/)
 - MinLog (from https://github.com/EsotericSoftware/minlog)
@@ -185,6 +186,13 @@ The following software have components provided under the terms of this license:
 - Redisson (from http://redisson.org, https://redisson.pro/)
 - ReflectASM (from https://github.com/EsotericSoftware/reflectasm)
 - Spring Core (from http://www.springframework.org, https://github.com/spring-projects/spring-framework, https://repo1.maven.org/maven2/org/springframework/spring-core)
+
+========================================================================
+BSL-1.0
+========================================================================
+The following software have components provided under the terms of this license:
+
+- Jackson-core (from http://wiki.fasterxml.com/JacksonHome, https://github.com/FasterXML/jackson-core)
 
 ========================================================================
 CC-BY-2.5
