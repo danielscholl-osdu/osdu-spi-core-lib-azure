@@ -35,7 +35,6 @@ The following software have components provided under the terms of this license:
 - Asynchronous Http Client Netty Utils (from http://github.com/AsyncHttpClient/async-http-client, https://repo1.maven.org/maven2/org/asynchttpclient/async-http-client-netty-utils)
 - Byte Buddy (without dependencies) (from https://bytebuddy.net/, https://repo1.maven.org/maven2/net/bytebuddy/byte-buddy)
 - Byte Buddy Java agent (from https://bytebuddy.net/, https://repo1.maven.org/maven2/net/bytebuddy/byte-buddy-agent)
-- ClassMate (from http://github.com/cowtowncoder/java-classmate)
 - Converter: Jackson (from https://github.com/square/retrofit, https://repo1.maven.org/maven2/com/squareup/retrofit2/converter-jackson)
 - Core functionality for the Reactor Netty library (from https://github.com/reactor/reactor-netty)
 - FindBugs-jsr305 (from http://findbugs.sourceforge.net/)
@@ -45,9 +44,7 @@ The following software have components provided under the terms of this license:
 - Guava ListenableFuture only (from https://github.com/google/guava, https://repo1.maven.org/maven2/com/google/guava/listenablefuture)
 - Guava: Google Core Libraries for Java (from http://code.google.com/p/guava-libraries, https://github.com/google/guava, https://repo1.maven.org/maven2/com/google/guava/guava)
 - HTTP functionality for the Reactor Netty library (from https://github.com/reactor/reactor-netty)
-- Hibernate Validator (from https://hibernate.org/validator, https://repo1.maven.org/maven2/org/hibernate/hibernate-validator, https://repo1.maven.org/maven2/org/hibernate/validator/hibernate-validator)
 - J2ObjC Annotations (from https://github.com/google/j2objc/)
-- JBoss Logging 3 (from http://www.jboss.org, https://www.jboss.org/)
 - JCIP Annotations under Apache License (from http://stephenc.github.com/jcip-annotations)
 - JJWT :: API (from https://github.com/jwtk/jjwt)
 - JJWT :: Extensions :: Jackson (from https://github.com/jwtk/jjwt)
@@ -153,8 +150,7 @@ The following software have components provided under the terms of this license:
 - org.apiguardian:apiguardian-api (from https://github.com/apiguardian-team/apiguardian)
 - org.opentest4j:opentest4j (from https://github.com/ota4j-team/opentest4j)
 - resilience4j (from https://github.com/resilience4j/resilience4j, https://resilience4j.readme.io/, ttps://resilience4j.readme.io)
-- swagger-annotations (from https://github.com/swagger-api/swagger-core, https://repo1.maven.org/maven2/io/swagger/core/v3/swagger-annotations)
-- swagger-models (from https://github.com/swagger-api/swagger-core, https://repo1.maven.org/maven2/io/swagger/core/v3/swagger-models)
+- swagger-annotations-jakarta (from https://github.com/swagger-api/swagger-core)
 
 ========================================================================
 BSD-2-Clause
@@ -208,7 +204,6 @@ The following software have components provided under the terms of this license:
 
 - Guava: Google Core Libraries for Java (from http://code.google.com/p/guava-libraries, https://github.com/google/guava, https://repo1.maven.org/maven2/com/google/guava/guava)
 - HdrHistogram (from http://hdrhistogram.github.io/HdrHistogram/)
-- Hibernate Validator (from https://hibernate.org/validator, https://repo1.maven.org/maven2/org/hibernate/hibernate-validator, https://repo1.maven.org/maven2/org/hibernate/validator/hibernate-validator)
 - LatencyUtils (from http://latencyutils.github.io/LatencyUtils/)
 - Netty/Common (from http://netty.io/, https://repo1.maven.org/maven2/io/netty/netty-common)
 - Redisson (from http://redisson.org, https://redisson.pro/)
