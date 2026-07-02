@@ -42,7 +42,7 @@
     <repos.id>os-core</repos.id>
     <repos.url>https://pkgs.dev.azure.com/slb-des-ext-collaboration/_packaging/os-core/maven/v1</repos.url>
 
-    <osdu.oscorecommon.version>5.4.1</osdu.oscorecommon.version>
+    <osdu.oscorecommon.version>7.1.0</osdu.oscorecommon.version>
 
     <!-- Netty BOM pinned to pull CVE fixes (netty 4.2.15.Final) since transitively-imported BOMs don't transit through os-core-common -->
     <netty-bom.version>4.2.15.Final</netty-bom.version>
@@ -147,7 +147,7 @@
       <dependency>
           <groupId>io.lettuce</groupId>
           <artifactId>lettuce-core</artifactId>
-          <version>6.8.1.RELEASE</version>
+          <version>7.5.2.RELEASE</version>
       </dependency>
       <!--
         OkHttp 3.x override: azure-mgmt-eventgrid chain brings 3.12.2 which has known CVEs.
@@ -367,6 +367,10 @@
       <groupId>org.redisson</groupId>
       <artifactId>redisson</artifactId>
       <version>${redisson.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.lettuce</groupId>
+      <artifactId>lettuce-core</artifactId>
     </dependency>
     <dependency>
       <groupId>jakarta.servlet</groupId>
