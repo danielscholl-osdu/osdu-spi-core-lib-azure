@@ -71,6 +71,8 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
     private AzureServicePrincipleTokenService tokenService;
 
     private static final String AAD_CLIENT_ID = "test-aad-client-id";
+    private static final String MANAGEMENT_SCOPE = "https://management.azure.com/.default";
+    private static final String COSMOS_SCOPE = "https://cosmos.azure.com/.default";
 
     /**
      * Creates a test JWT token with a valid structure and far-future expiration.
@@ -128,7 +130,7 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         verify(azureServicePrincipal).getLocalDevToken(anyString());
         
         // Verify other methods were not called
-        verify(azureServicePrincipal, never()).getWIToken(anyString(), anyString());
+        verify(azureServicePrincipal, never()).getWIToken(anyString());
         verify(azureServicePrincipal, never()).getMSIToken(anyString());
         verify(azureServicePrincipal, never()).getIdToken(anyString(), anyString(), anyString(), anyString());
     }
@@ -139,7 +141,7 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         String testToken = createTestJwtToken();
         when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(false);
         when(workloadIdentityConfiguration.getIsEnabled()).thenReturn(true);
-        when(azureServicePrincipal.getWIToken(eq(AAD_CLIENT_ID), anyString()))
+        when(azureServicePrincipal.getWIToken(eq(MANAGEMENT_SCOPE)))
             .thenReturn(testToken);
 
         // Act
@@ -150,9 +152,24 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         assertEquals(testToken, token);
 
         // Verify workload identity method was called
-        verify(azureServicePrincipal).getWIToken(eq(AAD_CLIENT_ID), anyString());
+        verify(azureServicePrincipal).getWIToken(eq(MANAGEMENT_SCOPE));
 
         // Verify local dev method was not called
+        verify(azureServicePrincipal, never()).getLocalDevToken(anyString());
+    }
+
+    @Test
+    public void testGetAuthorizationToken_CustomScope_UsesWorkloadIdentityScope() {
+        String testToken = createTestJwtToken();
+        when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(false);
+        when(workloadIdentityConfiguration.getIsEnabled()).thenReturn(true);
+        when(azureServicePrincipal.getWIToken(eq(COSMOS_SCOPE)))
+            .thenReturn(testToken);
+
+        String token = tokenService.getAuthorizationToken(COSMOS_SCOPE);
+
+        assertEquals(testToken, token);
+        verify(azureServicePrincipal).getWIToken(eq(COSMOS_SCOPE));
         verify(azureServicePrincipal, never()).getLocalDevToken(anyString());
     }
 
@@ -188,7 +205,7 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         ReflectionTestUtils.setField(tokenService, "localDevelopmentConfiguration", null);
         when(environment.acceptsProfiles(any(Profiles.class))).thenReturn(true);
         when(workloadIdentityConfiguration.getIsEnabled()).thenReturn(true);
-        when(azureServicePrincipal.getWIToken(eq(AAD_CLIENT_ID), anyString()))
+        when(azureServicePrincipal.getWIToken(eq(MANAGEMENT_SCOPE)))
             .thenReturn(testToken);
 
         // Act
@@ -199,7 +216,7 @@ public class AzureServicePrincipleTokenServiceLocalDevTest {
         assertEquals(testToken, token);
 
         // Verify fallback to workload identity
-        verify(azureServicePrincipal).getWIToken(eq(AAD_CLIENT_ID), anyString());
+        verify(azureServicePrincipal).getWIToken(eq(MANAGEMENT_SCOPE));
 
         // Verify local dev method was not called
         verify(azureServicePrincipal, never()).getLocalDevToken(anyString());

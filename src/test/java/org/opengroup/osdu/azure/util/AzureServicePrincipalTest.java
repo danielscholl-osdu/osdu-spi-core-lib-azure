@@ -164,13 +164,14 @@ public class AzureServicePrincipalTest {
         when(workloadIdentityCredential.getToken(requestCaptor.capture())).thenReturn(responseMono);
         mockSuccessfulTokenResponse(createAccessToken());
 
-        String result = azureServicePrincipal.getWIToken(appResourceId);
+        String scope = "https://management.azure.com/.default";
+        String result = azureServicePrincipal.getWIToken(scope);
         assertEquals(accessTokenContent, result);
 
-        // Verify both scopes in the correct order
+        // A client-credentials token can target only one resource.
         TokenRequestContext capturedRequest = requestCaptor.getValue();
-        assertEquals("https://management.azure.com/.default", capturedRequest.getScopes().get(0));
-        assertEquals(appResourceId + "/.default", capturedRequest.getScopes().get(1));
+        assertEquals(1, capturedRequest.getScopes().size());
+        assertEquals(scope, capturedRequest.getScopes().get(0));
 
         verify(workloadIdentityCredentialBuilder, times(1)).build();
         verify(workloadIdentityCredential, times(1)).getToken(any(TokenRequestContext.class));
@@ -185,12 +186,12 @@ public class AzureServicePrincipalTest {
         when(workloadIdentityCredential.getToken(requestCaptor.capture())).thenReturn(responseMono);
         mockFailedTokenResponse();
 
-        assertThrows(AppException.class, () -> azureServicePrincipal.getWIToken(appResourceId));
+        String scope = "https://management.azure.com/.default";
+        assertThrows(AppException.class, () -> azureServicePrincipal.getWIToken(scope));
 
-        // Verify both scopes in the correct order
         TokenRequestContext capturedRequest = requestCaptor.getValue();
-        assertEquals("https://management.azure.com/.default", capturedRequest.getScopes().get(0));
-        assertEquals(appResourceId + "/.default", capturedRequest.getScopes().get(1));
+        assertEquals(1, capturedRequest.getScopes().size());
+        assertEquals(scope, capturedRequest.getScopes().get(0));
 
         verify(workloadIdentityCredentialBuilder, times(1)).build();
         verify(workloadIdentityCredential, times(1)).getToken(any(TokenRequestContext.class));
@@ -215,22 +216,20 @@ public class AzureServicePrincipalTest {
     }
 
     @Test
-    public void TestGenerateWIToken_trailingSlash_deduplicatesScope() throws Exception {
-        String trailingSlashResourceId = "https://management.azure.com/";
-        String scope = "https://management.azure.com/.default";
+    public void TestGenerateWIToken_customScope() throws Exception {
+        String scope = "https://cosmos.azure.com/.default";
         ArgumentCaptor<TokenRequestContext> requestCaptor = ArgumentCaptor.forClass(TokenRequestContext.class);
 
         setupWorkloadIdentityCredentialMocks();
         when(workloadIdentityCredential.getToken(requestCaptor.capture())).thenReturn(responseMono);
         mockSuccessfulTokenResponse(createAccessToken());
 
-        String result = azureServicePrincipal.getWIToken(trailingSlashResourceId, scope);
+        String result = azureServicePrincipal.getWIToken(scope);
         assertEquals(accessTokenContent, result);
 
-        // Verify only ONE scope is sent (deduplication works) and no double slash
         TokenRequestContext capturedRequest = requestCaptor.getValue();
         assertEquals(1, capturedRequest.getScopes().size());
-        assertEquals("https://management.azure.com/.default", capturedRequest.getScopes().get(0));
+        assertEquals(scope, capturedRequest.getScopes().get(0));
     }
 
     // --- getLocalDevToken tests ---
@@ -295,7 +294,7 @@ public class AzureServicePrincipalTest {
             .thenReturn(Mono.error(new RuntimeException(new java.util.concurrent.TimeoutException("Azure AD timeout after 30s"))));
 
         AppException ex = assertThrows(AppException.class, () ->
-            azureServicePrincipal.getWIToken(appResourceId));
+            azureServicePrincipal.getWIToken("https://management.azure.com/.default"));
 
         assertNotNull(ex.getMessage());
         assertTrue(ex.getMessage().contains("timed out"),

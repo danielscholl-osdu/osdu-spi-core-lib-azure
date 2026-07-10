@@ -73,7 +73,7 @@ public final class AzureServicePrincipal {
      * | Credential Builder        | ManagedIdentityCredentialBuilder        | WorkloadIdentityCredentialBuilder        | ClientSecretCredentialBuilder            |
      * | Endpoint                  | IMDS (http://169.254.169.254/metadata)  | Kubernetes and Azure AD federation       | Azure AD                                 |
      * | Environment Dependency    | Azure Managed Identity-enabled resources| Kubernetes Workload Identity setup       | None (requires SPN credentials)          |
-     * | Input Parameters          | None                                    | Resource ID                              | SPN ID, SPN Secret, Tenant ID, Resource  |
+     * | Input Parameters          | Scope                                   | Scope                                    | SPN ID, SPN Secret, Tenant ID, Resource  |
      * | Use Case                  | Azure-native environments               | Kubernetes-native environments           | Non-Azure environments or explicit SPN usage |
      *
      * Summary:
@@ -153,24 +153,17 @@ public final class AzureServicePrincipal {
     }
 
     /**
-     * Method to generate token using Workload Identity.
-     * @param app_resource_id The resource ID of the target application
+     * Generates a token for one scope using Workload Identity.
      * @param scope The scope to request
      * @return AUTHENTICATION TOKEN
      */
-    public String getWIToken(final String app_resource_id, final String scope) {
+    public String getWIToken(final String scope) {
         try {
             WorkloadIdentityCredentialBuilder workloadIdentityClientBuilder = createworkloadIdentityClientBuilder();
             WorkloadIdentityCredential credential = workloadIdentityClientBuilder.build();
 
-            String sanitizedResourceId = sanitizeResourceId(app_resource_id);
-
             TokenRequestContext requestContext = new TokenRequestContext();
             requestContext.addScopes(scope);
-            String resourceScope = sanitizedResourceId.concat("/.default");
-            if (!resourceScope.equals(scope)) {
-                requestContext.addScopes(resourceScope);
-            }
             AccessToken token = credential.getToken(requestContext)
                     .timeout(AZURE_AD_TIMEOUT)
                     .block();
@@ -241,15 +234,6 @@ public final class AzureServicePrincipal {
         credentialBuilder.addLast(intelliJCredential);
 
         return credentialBuilder;
-    }
-
-    /**
-     * Method to generate token using Workload Identity.
-     * @param app_resource_id The resource ID of the target application
-     * @return AUTHENTICATION TOKEN
-     */
-    public String getWIToken(final String app_resource_id) {
-        return getWIToken(app_resource_id, MANAGEMENT_SCOPE);
     }
 
     /**
