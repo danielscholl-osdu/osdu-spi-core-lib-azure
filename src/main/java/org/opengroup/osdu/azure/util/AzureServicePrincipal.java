@@ -154,6 +154,8 @@ public final class AzureServicePrincipal {
 
     /**
      * Generates a token for one scope using Workload Identity.
+     * Client-credentials access tokens target one resource, so callers must
+     * request separate tokens for different resource scopes.
      * @param scope The scope to request
      * @return AUTHENTICATION TOKEN
      */
