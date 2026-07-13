@@ -164,7 +164,7 @@ public class AzureServicePrincipleTokenServiceTest {
             when(this.tokenCache.get(anyString())).thenReturn(expiredToken); // Use anyString for cache key
             when(this.workloadIdentityConfiguration.getIsEnabled()).thenReturn(true);
             when(this.podIdentityConfiguration.getIsEnabled()).thenReturn(false);
-            when(this.azureServicePrincipal.getWIToken(anyString(), anyString())).thenReturn(newTokenValue);
+            when(this.azureServicePrincipal.getWIToken(anyString())).thenReturn(newTokenValue);
 
             // Call the method
             String token = this.azureServicePrincipleTokenService.getAuthorizationToken();

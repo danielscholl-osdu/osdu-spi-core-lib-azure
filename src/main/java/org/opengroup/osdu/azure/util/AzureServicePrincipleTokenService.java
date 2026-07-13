@@ -119,7 +119,7 @@ public class AzureServicePrincipleTokenService {
             if (useLocalDevCredentials) {
                 accessToken = this.azureServicePrincipal.getLocalDevToken(aadClientId.concat("/.default"));
             } else if (workloadIdentityConfiguration.getIsEnabled()) {
-                accessToken = this.azureServicePrincipal.getWIToken(aadClientId, scope);
+                accessToken = this.azureServicePrincipal.getWIToken(scope);
             } else if (podIdentityConfiguration.getIsEnabled()) {
                 accessToken = this.azureServicePrincipal.getMSIToken(scope);
             } else {
