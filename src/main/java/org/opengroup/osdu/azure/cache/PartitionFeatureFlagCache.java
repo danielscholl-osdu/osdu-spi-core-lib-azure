@@ -17,20 +17,23 @@ package org.opengroup.osdu.azure.cache;
 import org.opengroup.osdu.azure.di.RedisAzureConfiguration;
 import org.opengroup.osdu.azure.logging.CoreLoggerFactory;
 import org.opengroup.osdu.azure.logging.ICoreLogger;
+import org.opengroup.osdu.core.common.cache.ICache;
+import org.opengroup.osdu.core.common.cache.VmCache;
 import org.opengroup.osdu.core.common.partition.PartitionInfo;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * <p>The cache bean is created only when caching is explicitly enabled <b>and</b> the Redis
- * connection is actually configured. The class itself is <b>fail-open</b>: every {@code redis.*}
- * field is defaulted so it is always constructed (even in a partition service with no Redis), and
- * when the Redis connection is absent the bean is simply not registered. The optional injection in
- * {@code PartitionFeatureFlagImpl} then stays {@code null} and the service falls back to making direct
- * Partition Service calls.</p>
+ * <p>{@code PartitionFeatureFlagImpl} injects its {@code ICache<String, PartitionInfo>} by type and
+ * requires the bean, so under the {@code dataPartition} strategy this configuration always registers
+ * exactly one: a Redis-backed cache when caching is enabled and Redis is configured, otherwise an
+ * in-memory {@link VmCache} fallback. Both are fail-open at call time (read/write errors are
+ * swallowed by the caller), so a Redis outage degrades to direct Partition Service calls without
+ * breaking startup.</p>
  */
 @Configuration
 @ConditionalOnProperty(prefix = "featureFlag", name = "strategy", havingValue = "dataPartition")
@@ -39,6 +42,7 @@ public class PartitionFeatureFlagCache {
         CoreLoggerFactory.getInstance().getLogger(PartitionFeatureFlagCache.class.getName());
 
     private static final int DEFAULT_CACHE_TTL_SECONDS = 600;
+    private static final int DEFAULT_CACHE_MAX_SIZE = 2000;
 
     @Value("${redis.hostname:}")
     private String redisHostname;
@@ -58,9 +62,9 @@ public class PartitionFeatureFlagCache {
     private int ffExpirationSeconds;
 
     /**
-     * Created only when caching is enabled AND the Redis connection is configured. If either
-     * condition is unmet, no bean is registered and {@code PartitionFeatureFlagImpl} falls back to
-     * direct Partition Service calls.
+     * Preferred bean: created when caching is enabled AND the Redis connection is configured.
+     * When it is not registered the in-memory {@link #partitionFeatureFlagInMemoryCache()} fallback
+     * takes over so the mandatory injection in {@code PartitionFeatureFlagImpl} is always satisfied.
      *
      * @return Redis-backed cache of {@link PartitionInfo} keyed by data-partition id
      */
@@ -78,5 +82,20 @@ public class PartitionFeatureFlagCache {
         return new RedisAzureCache<>(PartitionInfo.class,
             new RedisAzureConfiguration(database, ffExpirationSeconds,
                 Integer.parseInt(redisPort.trim()), redisConnectionTimeout, redisCommandTimeout, redisPrincipalId, redisHostname));
+    }
+
+    /**
+     * Fallback registered only when the Redis-backed bean is absent (caching disabled or Redis not
+     * configured), guaranteeing exactly one {@code ICache<String, PartitionInfo>} for the mandatory
+     * by-type injection in {@code PartitionFeatureFlagImpl}.
+     *
+     * @return in-memory cache of {@link PartitionInfo} keyed by data-partition id
+     */
+    @Bean("PartitionFeatureFlagCache")
+    @ConditionalOnMissingBean(name = "PartitionFeatureFlagCache")
+    public ICache<String, PartitionInfo> partitionFeatureFlagInMemoryCache() {
+        int ttl = ffExpirationSeconds > 0 ? ffExpirationSeconds : DEFAULT_CACHE_TTL_SECONDS;
+        LOGGER.info("Redis-backed PartitionFeatureFlagCache not registered; using in-memory VmCache fallback (ttl={}s).", ttl);
+        return new VmCache<>(ttl, DEFAULT_CACHE_MAX_SIZE);
     }
 }
