@@ -34,6 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 
 @ExtendWith(MockitoExtension.class)
@@ -160,6 +161,39 @@ class RedisAzureCacheTest {
         verify(mockRedisClient).decrement("db5:key8");
         verify(mockRedisClient).decrementBy("db5:key9", 5L);
         verify(mockRedissonClient).getLock("db5:key10");
+    }
+
+    // ── clearAll tests ───────────────────────────────────────────────────────
+
+    @Test
+    void clearAll_for_azure_managed_redis_should_delete_only_prefixed_keys() {
+        // Given: AMR (port 10000, db 5) — clearAll must not flush the whole DB
+        RedisAzureCache<String> cache = new RedisAzureCache<>(String.class, azureManagedRedisConfig);
+        ReflectionTestUtils.setField(cache, "redisClientFactory", mockRedisClientFactory);
+        when(mockRedisClientFactory.getClient(any(), any(), any())).thenReturn(mockRedisClient);
+        when(mockRedisClient.deleteByPattern(anyString())).thenReturn(0L);
+
+        // When
+        cache.clearAll();
+
+        // Then: deleteByPattern is called with the namespaced wildcard, not clearAll
+        verify(mockRedisClient).deleteByPattern("db5:*");
+        verify(mockRedisClient, never()).clearAll();
+    }
+
+    @Test
+    void clearAll_for_azure_cache_for_redis_should_delegate_to_client_clearAll() {
+        // Given: Azure Cache for Redis (port 6380) — logical DB isolation is native
+        RedisAzureCache<String> cache = new RedisAzureCache<>(String.class, azureCacheForRedisConfig);
+        ReflectionTestUtils.setField(cache, "redisClientFactory", mockRedisClientFactory);
+        when(mockRedisClientFactory.getClient(any(), any(), any())).thenReturn(mockRedisClient);
+
+        // When
+        cache.clearAll();
+
+        // Then: standard clearAll is called and deleteByPattern is never invoked
+        verify(mockRedisClient).clearAll();
+        verify(mockRedisClient, never()).deleteByPattern(anyString());
     }
 
     /**

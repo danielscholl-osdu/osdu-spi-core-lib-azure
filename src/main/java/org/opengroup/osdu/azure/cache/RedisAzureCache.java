@@ -83,10 +83,21 @@ public class RedisAzureCache<V> implements IRedisCache<String, V> {
 
     /**
      * Clear all entries from cache.
+     * <p>
+     * For Azure Managed Redis (AMR), which has a single logical database shared across apps,
+     * a blanket FLUSHDB would evict keys belonging to other applications. Instead, we delete
+     * only the keys that carry this app's key prefix, preserving isolation. For Azure Cache
+     * for Redis, which supports multiple logical databases, the standard clearAll() is used.
+     * </p>
      */
     @Override
     public void clearAll() {
-        getClient().clearAll();
+        if (keyPrefix.isEmpty()) {
+            getClient().clearAll();
+        } else {
+            // Delete only keys belonging to this app's namespace (e.g. "db7:*")
+            deleteByPattern("*");
+        }
     }
 
     /**
@@ -196,6 +207,19 @@ public class RedisAzureCache<V> implements IRedisCache<String, V> {
     @Override
     public boolean authenticate(final String username, final String password) {
         return getClient().authenticate(username, password);
+    }
+
+    /**
+     * Deletes all keys matching the specified pattern.
+     * The pattern is automatically prefixed with the configured keyPrefix before being passed to the underlying client.
+     * @param pattern Redis glob-style pattern (e.g., "cache:*", "*:session:*")
+     * @return number of keys deleted, or -1 if operation failed
+     */
+    @Override
+    public long deleteByPattern(final String pattern) {
+        // Apply the keyPrefix to the pattern to ensure we only delete keys in our database namespace
+        String prefixedPattern = getPrefixedKey(pattern);
+        return getClient().deleteByPattern(prefixedPattern);
     }
 
     /**

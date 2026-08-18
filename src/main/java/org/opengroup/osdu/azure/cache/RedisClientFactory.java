@@ -6,7 +6,13 @@ import com.azure.identity.DefaultAzureCredential;
 import com.azure.security.keyvault.secrets.SecretClient;
 import io.lettuce.core.ClientOptions;
 import io.lettuce.core.SocketOptions;
+import io.lettuce.core.cluster.ClusterClientOptions;
+import io.lettuce.core.cluster.ClusterTopologyRefreshOptions;
 import io.lettuce.core.codec.RedisCodec;
+import io.lettuce.core.resource.ClientResources;
+import io.lettuce.core.resource.DefaultClientResources;
+import io.lettuce.core.resource.MappingSocketAddressResolver;
+import io.lettuce.core.internal.HostAndPort;
 import org.opengroup.osdu.azure.KeyVaultFacade;
 import org.opengroup.osdu.azure.di.MSIConfiguration;
 import org.opengroup.osdu.azure.di.RedisAzureConfiguration;
@@ -14,6 +20,7 @@ import org.opengroup.osdu.azure.logging.CoreLoggerFactory;
 import org.opengroup.osdu.azure.logging.ICoreLogger;
 import org.opengroup.osdu.core.common.cache.IRedisCache;
 import org.opengroup.osdu.core.common.cache.RedisCache;
+import org.opengroup.osdu.core.common.cache.RedisClusterCache;
 import org.redisson.Redisson;
 import org.redisson.api.RedissonClient;
 import org.redisson.config.Config;
@@ -31,7 +38,6 @@ import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -50,6 +56,7 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
     private static final int AZURE_MANAGED_REDIS_PORT = 10000;
 
     private static RedissonClient redissonClient = null;
+    private static ClientResources clusterClientResources = null;
 
     @Autowired
     private DefaultAzureCredential defaultAzureCredential;
@@ -92,18 +99,27 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
         // No need for manual connection recreation - credentials provider is called on AUTH errors
         if (this.redisClientMap.containsKey(cacheKey)) {
             IRedisCache<String, V> cacheObject = this.redisClientMap.get(cacheKey);
-            if (cacheObject instanceof RedisCache) {
+            String cachedType = getCacheTypeNameForLogging(cacheObject);
+            if (cacheObject instanceof RedisCache || cacheObject instanceof RedisClusterCache) {
+                logger.debug("Returning existing Redis client from cache for key: {}, type: {}", cacheKey, cachedType);
                 return cacheObject;
             } else {
-                // No Op cache it is. Re-try to initialize cache.
-                logger.info("The client is of NoOpRedisCache. Re-checking if Redis is available.");
+                // Cached client is not a valid Redis client (likely NoOpRedisCache). Re-try to initialize.
+                logger.info("Cached client type {} is not a valid Redis client. Re-checking if Redis is available.", cachedType);
             }
         }
 
         IRedisCache<String, V> redisCache = this.redisClientMap.computeIfAbsent(cacheKey, key ->
             createRedisClient(valueClass, redisConfiguration, codec)
         );
-        return redisCache == null ? new NoOpRedisCache<>() : redisCache;
+
+        if (redisCache == null) {
+            logger.warn("Redis client creation returned null for cache key: {}. Returning NoOpRedisCache.", cacheKey);
+            return new NoOpRedisCache<>();
+        }
+
+        logger.info("Successfully obtained Redis client for cache key: {}, type: {}", cacheKey, getCacheTypeNameForLogging(redisCache));
+        return redisCache;
     }
 
     /**
@@ -130,6 +146,23 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
     }
 
     /**
+     * Get a clean type name for logging purposes.
+     * Handles anonymous classes and provides specific names for known types.
+     * @param cache the cache instance to get the type name for
+     * @return human-readable type name for logging
+     */
+    private String getCacheTypeNameForLogging(final IRedisCache<?, ?> cache) {
+        if (cache instanceof RedisClusterCache) {
+            return "RedisClusterCache";
+        }
+        if (cache instanceof RedisCache) {
+            return "RedisCache";
+        }
+        Class<?> cacheClass = cache.getClass();
+        return cacheClass.getSimpleName().isEmpty() ? cacheClass.getName() : cacheClass.getSimpleName();
+    }
+
+    /**
      * Create redis client object.
      * @param valueClass Class type for value
      * @param redisConfiguration configuration for redis client
@@ -150,75 +183,114 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
         }
 
         final int port = redisConfiguration.getPort();
+        final String principalId = redisConfiguration.getPrincipalId();
+
+        logger.info("Starting Redis client creation - Host: {}, Port: {}, Principal ID configured: {}", host, port, (principalId != null && !principalId.isBlank() ? "yes" : "no"));
 
         // Determine the correct database based on Redis type (new AzureManagedRedis vs old AzureCacheForRedis)
+        // Note: For AMR (cluster mode), the database value is used as a key prefix to maintain backward compatibility, since AMR only supports database 0.
         int database = getDatabaseForRedisType(port, redisConfiguration.getDatabase());
+        final int expiration = redisConfiguration.getExpiration();
+        final int commandTimeout = redisConfiguration.getCommandTimeout();
 
         ClientOptions options = ClientOptions.builder()
             .socketOptions(SocketOptions.builder()
             .connectTimeout(Duration.ofSeconds(redisConfiguration.getConnectionTimeout())).build())
             .build();
 
-        final String principalId = redisConfiguration.getPrincipalId();
+        // Configure cluster options with topology refresh for Azure Managed Redis
+        // Topology refresh ensures cluster changes are detected and routing is updated
+        ClusterTopologyRefreshOptions topologyRefreshOptions = ClusterTopologyRefreshOptions.builder()
+            .enablePeriodicRefresh(Duration.ofSeconds(30))
+            .enableAllAdaptiveRefreshTriggers()
+            .build();
 
-        if (canUseMsiAuthentication(principalId)) { // MSI authentication path (both direct hostname and legacy with MSI enabled)
-            // Create credentials provider via factory for automatic token refresh
-            AzureRedisMsiCredentialsProvider credentialsProvider = new AzureRedisMsiCredentialsProvider(principalId, defaultAzureCredential);
+        ClusterClientOptions clusterOptions = ClusterClientOptions.builder()
+            .socketOptions(options.getSocketOptions())
+            .timeoutOptions(options.getTimeoutOptions())
+            .topologyRefreshOptions(topologyRefreshOptions)
+            .build();
 
-            logger.info("Creating Redis client with AzureRedisMsiCredentialsProvider for automatic MSI token refresh");
+        // Resolve authentication: MSI or password
+        AzureRedisMsiCredentialsProvider credentialsProvider = null;
+        String password = null;
 
-            return new RedisCache<String, V>(
-                host,
-                port,
-                credentialsProvider, // Pass provider for automatic token refresh
-                redisConfiguration.getExpiration(),
-                redisConfiguration.getCommandTimeout(),
-                database,
-                true, // sslEnabled
-                options,
-                String.class,
-                valueClass
-            ) {
-                @Override // Anonymous inner class allows per-instance codec customization via closure without creating yet an additional extension/implementation class of the common RedisCache
-                public RedisCodec<String, V> getCodec(final Class<String> classOfK, final Class<V> classOfV) {
-                    return codec == null ? super.getCodec(classOfK, classOfV) : codec;
-                }
-            };
+        if (canUseMsiAuthentication(principalId)) {
+            logger.info("Using MSI authentication with RedisCredentialsProvider");
+            credentialsProvider = new AzureRedisMsiCredentialsProvider(principalId, defaultAzureCredential);
         } else {
-            // Password-based authentication fallback
             if (msiConfiguration.getIsEnabled()) {
-                logger.info("MSI is enabled but no valid principal ID provided, falling back to password authentication.");
+                logger.info("MSI enabled but no valid principal ID, falling back to password authentication");
             }
-
-            String password = getSecret(redisConfiguration.getPasswordKey());
+            password = getSecret(redisConfiguration.getPasswordKey());
             if (password == null) {
                 logger.warn("Redis password does not exist. Redis is not available yet.");
                 return null;
             }
+        }
 
-            return new RedisCache<String, V>(
-                host,
-                port,
-                null, // No username for password-based auth
-                password,
-                redisConfiguration.getExpiration(),
-                redisConfiguration.getCommandTimeout(),
-                database,
-                true, // sslEnabled
-                options,
-                String.class,
-                valueClass
-            ) {
-                @Override // same comment as above regarding anonymous inner class
-                public RedisCodec<String, V> getCodec(final Class<String> classOfK, final Class<V> classOfV) {
-                    return codec == null ? super.getCodec(classOfK, classOfV) : codec;
+        // Azure Managed Redis (port 10000) always runs in cluster mode
+        // Azure Cache for Redis (port 6380) always runs in standalone mode
+        if (port == AZURE_MANAGED_REDIS_PORT) {
+            logger.info("Creating Redis CLUSTER client for Azure Managed Redis");
+
+            try {
+                // Get or create ClientResources with address resolver for cluster mode
+                // This maps cluster node IP addresses to the Azure hostname for proper SSL/TLS verification
+                ClientResources resources = getOrCreateClusterClientResources(host);
+
+                if (credentialsProvider == null) {
+                    logger.info("Creating RedisClusterCache with password authentication for host: {}, port: {}", host, port);
+                    return new RedisClusterCache<V>(host, port, null, password, expiration, commandTimeout, clusterOptions, resources, valueClass) {
+                        @Override
+                        public RedisCodec<String, V> getCodec(final Class<String> classOfK, final Class<V> classOfV) {
+                            return codec == null ? super.getCodec(classOfK, classOfV) : codec;
+                        }
+                    };
+                } else {
+                    logger.info("Creating RedisClusterCache with MSI authentication for host: {}, port: {}", host, port);
+                    return new RedisClusterCache<V>(host, port, credentialsProvider, expiration, commandTimeout, clusterOptions, resources, valueClass) {
+                        @Override
+                        public RedisCodec<String, V> getCodec(final Class<String> classOfK, final Class<V> classOfV) {
+                            return codec == null ? super.getCodec(classOfK, classOfV) : codec;
+                        }
+                    };
                 }
-            };
+            } catch (Exception e) {
+                logger.error("Failed to create Redis CLUSTER client for Azure Managed Redis. Host: {}, Port: {}, Exception: {}", host, port, e.getMessage(), e);
+                return null;
+            }
+        } else {
+            logger.info("Creating standalone Redis client for Azure Cache for Redis with no cluster support.");
+
+            try {
+                if (credentialsProvider == null) {
+                    logger.info("Creating RedisCache with password authentication for host: {}, port: {}", host, port);
+                    return new RedisCache<String, V>(host, port, null, password, expiration, commandTimeout, database, true, options, String.class, valueClass) {
+                        @Override
+                        public RedisCodec<String, V> getCodec(final Class<String> classOfK, final Class<V> classOfV) {
+                            return codec == null ? super.getCodec(classOfK, classOfV) : codec;
+                        }
+                    };
+                } else {
+                    logger.info("Creating RedisCache with MSI authentication for host: {}, port: {}", host, port);
+                    return new RedisCache<String, V>(host, port, credentialsProvider, expiration, commandTimeout, database, true, options, String.class, valueClass) {
+                        @Override
+                        public RedisCodec<String, V> getCodec(final Class<String> classOfK, final Class<V> classOfV) {
+                            return codec == null ? super.getCodec(classOfK, classOfV) : codec;
+                        }
+                    };
+                }
+            } catch (Exception e) {
+                logger.error("Failed to create standalone Redis client for Azure Cache for Redis. Host: {}, Port: {}, Exception: {}", host, port, e.getMessage(), e);
+                return null;
+            }
         }
     }
 
     /**
      * Create a new RedissonClient instance.
+     * Automatically detects Azure Managed Redis (port 10000) and configures cluster mode.
      * @param applicationName application name for the client
      * @param redisAzureConfiguration configuration for redis client
      * @return new RedissonClient instance or null if creation fails
@@ -232,34 +304,67 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
         }
 
         final int port = redisAzureConfiguration.getPort();
+        final String principalId = redisAzureConfiguration.getPrincipalId();
 
         // Determine the correct database based on Redis type (new AzureManagedRedis vs old AzureCacheForRedis)
         int database = getDatabaseForRedisType(port, redisAzureConfiguration.getDatabase());
 
+        // Azure Managed Redis (AMR) runs in cluster mode - detect by port 10000
+        boolean isAzureManagedRedis = (port == AZURE_MANAGED_REDIS_PORT);
+
         Config config = new Config();
-        var serverConfig = config.useSingleServer()
-            .setAddress(String.format("rediss://%s:%d", redisHost, port))
-            .setDatabase(database)
-            .setKeepAlive(true)
-            .setClientName(applicationName);
 
-        final String principalId = redisAzureConfiguration.getPrincipalId();
+        if (isAzureManagedRedis) {
+            // Configure for cluster mode (AMR)
+            logger.info("Detected Azure Managed Redis (port 10000) - configuring Redisson for cluster mode");
 
-        if (canUseMsiAuthentication(principalId)) {
-            // Use CredentialsResolver for dynamic MSI token refresh - this is the proper way in Redisson 3.52+
-            serverConfig.setCredentialsResolver(new RedissonMsiCredentialsResolver(principalId));
-            logger.info("Configured Redisson client with RedissonMsiCredentialsResolver for dynamic token refresh");
+            var clusterConfig = config.useClusterServers()
+                .addNodeAddress(String.format("rediss://%s:%d", redisHost, port)) // Single seed node; client will auto-discover remaining cluster nodes
+                .setScanInterval(30000) // Scan cluster topology every 30 seconds
+                .setKeepAlive(true)
+                .setClientName(applicationName);
+
+            if (canUseMsiAuthentication(principalId)) {
+                // Use CredentialsResolver for dynamic MSI token refresh in cluster mode
+                clusterConfig.setCredentialsResolver(new RedissonMsiCredentialsResolver(principalId));
+                logger.info("Configured Redisson CLUSTER client with RedissonMsiCredentialsResolver for dynamic token refresh");
+            } else {
+                if (msiConfiguration.getIsEnabled()) {
+                    logger.info("MSI is enabled but no valid principal ID provided, using password authentication for Redisson CLUSTER client.");
+                }
+                String password = getSecret(redisAzureConfiguration.getPasswordKey());
+                if (password == null) {
+                    logger.warn("Redis password does not exist. Redisson CLUSTER client is not available yet.");
+                    return null;
+                }
+                clusterConfig.setPassword(password);
+            }
         } else {
-            if (msiConfiguration.getIsEnabled()) {
-                logger.info("MSI is enabled but no valid principal ID provided, using password authentication for Redisson client.");
+            // Configure for single-server mode (Azure Cache for Redis)
+            logger.info("Configuring Redisson for single-server mode (Azure Cache for Redis)");
+
+            var serverConfig = config.useSingleServer()
+                .setAddress(String.format("rediss://%s:%d", redisHost, port))
+                .setDatabase(database)
+                .setKeepAlive(true)
+                .setClientName(applicationName);
+
+            if (canUseMsiAuthentication(principalId)) {
+                // Use CredentialsResolver for dynamic MSI token refresh - this is the proper way in Redisson 3.52+
+                serverConfig.setCredentialsResolver(new RedissonMsiCredentialsResolver(principalId));
+                logger.info("Configured Redisson client with RedissonMsiCredentialsResolver for dynamic token refresh");
+            } else {
+                if (msiConfiguration.getIsEnabled()) {
+                    logger.info("MSI is enabled but no valid principal ID provided, using password authentication for Redisson client.");
+                }
+                // Static password authentication for non-MSI scenarios or MSI without valid principal ID
+                String password = getSecret(redisAzureConfiguration.getPasswordKey());
+                if (password == null) {
+                    logger.warn("Redis password does not exist. Redisson client is not available yet.");
+                    return null;
+                }
+                serverConfig.setPassword(password);
             }
-            // Static password authentication for non-MSI scenarios or MSI without valid principal ID
-            String password = getSecret(redisAzureConfiguration.getPasswordKey());
-            if (password == null) {
-                logger.warn("Redis password does not exist. Redisson client is not available yet.");
-                return null;
-            }
-            serverConfig.setPassword(password);
         }
 
         return Redisson.create(config);
@@ -287,11 +392,8 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
         String host = redisConfiguration.getHostname();
 
         if (host != null && !host.isBlank()) {
-            // Direct hostname path: enforce MSI authentication
-            if (!canUseMsiAuthentication(redisConfiguration.getPrincipalId())) {
-                throw new IllegalArgumentException("MSI authentication with valid principal ID is required when using direct hostname for Redis connection");
-            }
-            logger.info("Using direct hostname for Redis connection with MSI authentication");
+            // Direct hostname path: supports both MSI and password authentication
+            logger.info("Using direct hostname for Redis connection: {}", host);
             return host;
         }
 
@@ -353,6 +455,41 @@ public class RedisClientFactory<V> implements IRedisClientFactory<V> {
      */
     private String getSecret(final String keyName) {
         return KeyVaultFacade.getSecretWithDefault(secretClient, keyName, null);
+    }
+
+    /**
+     * Get or create ClientResources with address resolver for cluster mode.
+     * Azure Managed Redis cluster topology discovery returns IP addresses, but SSL/TLS
+     * hostname verification requires connecting via the hostname. This resolver maps all
+     * cluster node addresses to the Azure hostname while preserving port numbers.
+     * This allows full SSL/TLS validation including hostname verification.
+     * @param redisHost the Azure Redis hostname (e.g., "yourcache.redis.cache.windows.net")
+     * @return ClientResources configured with address mapping for cluster nodes
+     */
+    private ClientResources getOrCreateClusterClientResources(final String redisHost) {
+        if (clusterClientResources == null) {
+            synchronized (RedisClientFactory.class) {
+                if (clusterClientResources == null) {
+                    final ICoreLogger logger = CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME);
+                    logger.info("Creating ClientResources with MappingSocketAddressResolver for host: {}", redisHost);
+
+                    try {
+                        // Map all cluster node addresses (returned as IPs) to the public hostname
+                        // This ensures SSL/TLS uses the hostname for SNI and certificate validation
+                        clusterClientResources = DefaultClientResources.builder()
+                            .socketAddressResolver(MappingSocketAddressResolver.create(
+                                (HostAndPort hostAndPort) -> HostAndPort.of(redisHost, hostAndPort.getPort())
+                            ))
+                            .build();
+                        logger.info("Successfully created ClientResources for host: {}", redisHost);
+                    } catch (Exception e) {
+                        logger.error("Failed to create ClientResources for host: {}. Exception: {}", redisHost, e.getMessage(), e);
+                        throw e; // Re-throw to propagate to caller
+                    }
+                }
+            }
+        }
+        return clusterClientResources;
     }
 
     /**
