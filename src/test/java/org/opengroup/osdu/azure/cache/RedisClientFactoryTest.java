@@ -253,48 +253,32 @@ public class RedisClientFactoryTest {
         assertTrue(map.isEmpty());
     }
 
-    @ParameterizedTest(name = "MSI enabled={0}, principalId={1}, isRedisson={2}")
+    @ParameterizedTest(name = "MSI enabled={0}, principalId={1} => uses direct hostname with password auth")
     @CsvSource(nullValues = "NULL", value = {
-            "false, principal-123, false",
-            "true,  NULL,          false",
-            "true,  ,              false",
-            "false, principal-123, true",
-            "true,  NULL,          true",
-            "true,  ,              true"
+            "false, principal-123",
+            "true,  NULL",
+            "true,  ''"
     })
-    public void should_throw_exception_when_direct_hostname_without_valid_msi(
-            boolean isMsiEnabled,
-            String principalId,
-            boolean isRedissonClient) {
-        
-        when(redisConfiguration.getHostname()).thenReturn("redis.example.com");
-        when(redisConfiguration.getPrincipalId()).thenReturn(principalId);
-        when(msiConfiguration.getIsEnabled()).thenReturn(isMsiEnabled);
-        
-        if (isRedissonClient) {
-            try {
-                setupLoggerMock();
+    public void should_use_direct_hostname_with_password_auth(boolean isMsiEnabled, String principalId) {
+        String directHostname = "redis.example.com";
 
-                IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
-                    redisClientFactory.getRedissonClient(DUMMY_NAME, redisConfiguration)
-                );
+        setupRedisConfiguration(directHostname, principalId, isMsiEnabled);
+        setupComputeIfAbsentMock();
 
-                assertEquals("MSI authentication with valid principal ID is required when using direct hostname for Redis connection", exception.getMessage());
-            } finally {
-                resetSingleton();
-            }
-        } else {
-            when(redisClientMap.containsKey(anyString())).thenReturn(false);
-            when(redisClientMap.computeIfAbsent(anyString(), any())).thenAnswer(invocation -> {
-                java.util.function.Function<String, IRedisCache<String, List<String>>> function = invocation.getArgument(1);
-                return function.apply(invocation.getArgument(0));
-            });
+        // Setup password authentication
+        var passwordSecret = mockKeyVaultSecret("test-password");
+        lenient().when(secretClient.getSecret("redis-password")).thenReturn(passwordSecret);
+        setupLoggerMock();
 
-            IllegalArgumentException exception = assertThrows(IllegalArgumentException.class, () ->
-                redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null)
-            );
+        try {
+            redisClientFactory.getClient(LIST_STRING_CLASS, redisConfiguration, null);
 
-            assertEquals("MSI authentication with valid principal ID is required when using direct hostname for Redis connection", exception.getMessage());
+            // Verify direct hostname was used (no AKV lookup for hostname)
+            verify(secretClient, never()).getSecret("redis-hostname");
+            // Verify password was retrieved from AKV
+            verify(secretClient).getSecret("redis-password");
+        } finally {
+            resetSingleton();
         }
     }
 

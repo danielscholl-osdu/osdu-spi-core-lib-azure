@@ -91,4 +91,10 @@ public final class NoOpRedisCache<V> implements IRedisCache<String, V> {
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - authenticate");
         return true;
     }
+
+    @Override
+    public long deleteByPattern(final String pattern) {
+        CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("NoOpRedisCache - deleteByPattern");
+        return 0L;
+    }
 }
