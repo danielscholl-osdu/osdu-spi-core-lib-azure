@@ -1,15 +1,23 @@
 package org.opengroup.osdu.azure.cosmosdb;
 
+import java.time.Duration;
+import java.util.Map;
+import java.util.function.Function;
+
 import com.azure.cosmos.CosmosClient;
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosClientBuilder;
+import com.azure.cosmos.CosmosDiagnosticsThresholds;
 import com.azure.cosmos.ThrottlingRetryOptions;
+import com.azure.cosmos.models.CosmosClientTelemetryConfig;
+import com.azure.cosmos.models.CosmosMicrometerMetricsOptions;
 import com.azure.identity.DefaultAzureCredential;
 import com.azure.security.keyvault.secrets.SecretClient;
 import com.azure.security.keyvault.secrets.models.KeyVaultSecret;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -22,17 +30,18 @@ import org.opengroup.osdu.azure.di.MSIConfiguration;
 import org.opengroup.osdu.azure.logging.CoreLoggerFactory;
 import org.opengroup.osdu.azure.partition.PartitionInfoAzure;
 import org.opengroup.osdu.azure.partition.PartitionServiceClient;
-
-import java.util.Map;
-import java.util.function.Function;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.argThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.MockitoAnnotations.initMocks;
 import static org.opengroup.osdu.common.TestUtils.setFieldValue;
 
@@ -118,6 +127,9 @@ public class CosmosClientFactoryImplTest {
         when(cosmosClientBuilder.buildClient()).thenReturn(cosmosClient);
 
         assertNotNull(sut.getClient(PARTITION_ID));
+
+        verify(cosmosClientBuilder).buildClient();
+        assertTelemetryConfigured(cosmosClientBuilder);
     }
 
     @Test
@@ -181,6 +193,9 @@ public class CosmosClientFactoryImplTest {
         when(cosmosClientBuilder.buildAsyncClient()).thenReturn(cosmosAsyncClient);
 
         assertNotNull(sut.getAsyncClient(PARTITION_ID));
+
+        verify(cosmosClientBuilder).buildAsyncClient();
+        assertTelemetryConfigured(cosmosClientBuilder);
     }
 
     @Test
@@ -226,6 +241,9 @@ public class CosmosClientFactoryImplTest {
         when(cosmosClientBuilder.buildClient()).thenReturn(cosmosClient);
 
         assertNotNull(sut.getSystemClient());
+
+        verify(cosmosClientBuilder).buildClient();
+        assertTelemetryConfigured(cosmosClientBuilder);
     }
 
     @Test
@@ -271,7 +289,6 @@ public class CosmosClientFactoryImplTest {
         }
     }
 
-
     private void mockComputeIfAbsentOnCache(AbstractCosmosClientCache cacheMock, String key, boolean keyWithPostfix) {
         String cacheKey;
         if(keyWithPostfix) {
@@ -291,5 +308,32 @@ public class CosmosClientFactoryImplTest {
     private String getCacheKeyPostfix(AbstractCosmosClientCache cacheMock) {
         return cacheMock instanceof CosmosClientCache ? CACHE_KEY_POSTFIX_COSMOS_CLIENT
                 : CACHE_KEY_POSTFIX_COSMOS_ASYNC_CLIENT;
+    }
+
+        private void assertTelemetryConfigured(final CosmosClientBuilder builder) {
+        ArgumentCaptor<CosmosClientTelemetryConfig> telemetryCaptor =
+            ArgumentCaptor.forClass(CosmosClientTelemetryConfig.class);
+        verify(builder).clientTelemetryConfig(telemetryCaptor.capture());
+
+        CosmosClientTelemetryConfig telemetryConfig = telemetryCaptor.getValue();
+        CosmosMicrometerMetricsOptions metricsOptions =
+            (CosmosMicrometerMetricsOptions) ReflectionTestUtils.getField(
+                telemetryConfig, "micrometerMetricsOptions");
+        CosmosDiagnosticsThresholds thresholds =
+            (CosmosDiagnosticsThresholds) ReflectionTestUtils.getField(
+                telemetryConfig, "diagnosticsThresholds");
+
+        assertNotNull(metricsOptions);
+        assertNotNull(thresholds);
+        assertFalse((Boolean) ReflectionTestUtils.getField(
+            metricsOptions, "defaultShouldPublishHistograms"));
+        assertTrue((Boolean) ReflectionTestUtils.getField(
+            metricsOptions, "defaultApplyDiagnosticThresholdsForTransportLevelMeters"));
+        assertEquals(10.0f, (Float) ReflectionTestUtils.invokeMethod(
+            thresholds, "getRequestChargeThreshold"));
+        assertEquals(Duration.ofSeconds(1), ReflectionTestUtils.invokeMethod(
+            thresholds, "getPointOperationLatencyThreshold"));
+        assertEquals(Duration.ofSeconds(3), ReflectionTestUtils.invokeMethod(
+            thresholds, "getNonPointOperationLatencyThreshold"));
     }
 }
