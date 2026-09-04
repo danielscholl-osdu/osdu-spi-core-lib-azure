@@ -1,12 +1,16 @@
 package org.opengroup.osdu.azure.cosmosdb;
 
+import java.time.Duration;
+
 import com.azure.cosmos.CosmosAsyncClient;
 import com.azure.cosmos.CosmosClient;
 import com.azure.cosmos.CosmosClientBuilder;
 import com.azure.cosmos.DirectConnectionConfig;
 
-
+import com.azure.cosmos.CosmosDiagnosticsThresholds;
 import com.azure.cosmos.ThrottlingRetryOptions;
+import com.azure.cosmos.models.CosmosClientTelemetryConfig;
+import com.azure.cosmos.models.CosmosMicrometerMetricsOptions;
 import com.azure.identity.DefaultAzureCredential;
 import com.azure.security.keyvault.secrets.SecretClient;
 import org.opengroup.osdu.azure.KeyVaultFacade;
@@ -63,6 +67,18 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
 
     @Value("${cosmos.maxConnectionsPerEndpoint:130}")
     private Integer maxConnectionPerEndpoint;
+
+    // Telemetry thresholds to retain only operationally useful Cosmos metrics while preventing
+    // Prometheus cardinality explosions from transport-level histograms.
+    @Value("${azure.cosmos.metrics.requestChargeThreshold:10}")
+    private float requestChargeThreshold;
+    @Value("${azure.cosmos.metrics.pointOperationLatencyThresholdMs:1000}")
+    private long pointOperationLatencyThresholdMs;
+    @Value("${azure.cosmos.metrics.nonPointOperationLatencyThresholdMs:3000}")
+    private long nonPointOperationLatencyThresholdMs;
+    private static final float DEFAULT_REQUEST_CHARGE_THRESHOLD = 10.0f;
+    private static final long DEFAULT_POINT_OPERATION_LATENCY_THRESHOLD_MS = 1000L;
+    private static final long DEFAULT_NON_POINT_OPERATION_LATENCY_THRESHOLD_MS = 3000L;
 
     /**
      * @param dataPartitionId Data Partition Id
@@ -121,7 +137,9 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
                     .key(pi.getCosmosPrimaryKey())
                     .throttlingRetryOptions(throttlingRetryOptions);
         }
+
         setDirectMode(cosmosClientBuilder);
+        setClientTelemetry(cosmosClientBuilder);
 
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME)
                 .debug("Created CosmosClient for dataPartition {}.", dataPartitionId);
@@ -150,7 +168,10 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
                     .key(pi.getCosmosPrimaryKey())
                     .throttlingRetryOptions(throttlingRetryOptions);
         }
+
         setDirectMode(cosmosAsyncClientBuilder);
+        setClientTelemetry(cosmosAsyncClientBuilder);
+
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME)
                 .debug("Created CosmosAsyncClient for dataPartition {}.", dataPartitionId);
         return cosmosAsyncClientBuilder.buildAsyncClient();
@@ -172,7 +193,10 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
                     .endpoint(getSecret(systemCosmosConfig.getCosmosDBAccountKeyName()))
                     .key(getSecret(systemCosmosConfig.getCosmosPrimaryKeyName()));
         }
+
         setDirectMode(cosmosClientBuilder);
+        setClientTelemetry(cosmosClientBuilder);
+
         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME)
                 .debug("Created CosmosClient for system resources");
 
@@ -204,5 +228,49 @@ public class CosmosClientFactoryImpl implements ICosmosClientFactory {
         if (connectionConfig != null) {
             builder.directMode(connectionConfig);
         }
+    }
+
+    /**
+     * Configure Cosmos SDK telemetry to retain operationally useful metrics
+     * (requests, latency, RU consumption, response codes) while reducing
+     * cardinality from transport-level RNTBD histograms.
+     *
+     * @param builder CosmosClientBuilder to configure
+     */
+    private void setClientTelemetry(final CosmosClientBuilder builder) {
+        if (requestChargeThreshold <= 0) {
+            requestChargeThreshold = DEFAULT_REQUEST_CHARGE_THRESHOLD;
+        }
+        if (pointOperationLatencyThresholdMs <= 0) {
+            pointOperationLatencyThresholdMs = DEFAULT_POINT_OPERATION_LATENCY_THRESHOLD_MS;
+        }
+        if (nonPointOperationLatencyThresholdMs <= 0) {
+            nonPointOperationLatencyThresholdMs = DEFAULT_NON_POINT_OPERATION_LATENCY_THRESHOLD_MS;
+        }
+
+        // Disable histograms to avoid cardinality explosions while keeping aggregate request/RU metrics.
+        // Detailed transport diagnostics are only emitted for operations crossing the configured thresholds.
+        CosmosMicrometerMetricsOptions metricsOptions =
+            new CosmosMicrometerMetricsOptions()
+                .enableHistogramsByDefault(false)
+                .applyDiagnosticThresholdsForTransportLevelMeters(true);
+
+        // Only requests above the RU or latency thresholds produce detailed transport diagnostics.
+        // point ops: read-by-id, upsert, delete
+        // non-point ops: queries, scans, cross-partition work
+        CosmosDiagnosticsThresholds thresholds =
+            new CosmosDiagnosticsThresholds()
+                .setRequestChargeThreshold(requestChargeThreshold)
+                .setPointOperationLatencyThreshold(Duration.ofMillis(pointOperationLatencyThresholdMs))
+                .setNonPointOperationLatencyThreshold(Duration.ofMillis(nonPointOperationLatencyThresholdMs));
+
+        CosmosClientTelemetryConfig telemetryConfig =
+            new CosmosClientTelemetryConfig()
+                .metricsOptions(metricsOptions)
+                .diagnosticsThresholds(thresholds);
+
+         CoreLoggerFactory.getInstance().getLogger(LOGGER_NAME).info("Applying Cosmos telemetry configuration: histograms disabled, transport metrics threshold-filtered.");
+
+        builder.clientTelemetryConfig(telemetryConfig);
     }
 }
