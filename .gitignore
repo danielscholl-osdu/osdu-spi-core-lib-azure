@@ -36,3 +36,5 @@ target/
 CLAUDE.md
 .mcp.json
 .github/copilot-instructions.md
+# Publish workflow staging repository
+staging/

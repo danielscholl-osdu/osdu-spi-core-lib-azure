@@ -1,0 +1,95 @@
+name: Publish
+
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v3.1.0
+        type: string
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  maven:
+    runs-on: ubuntu-latest
+    environment: publish
+    env:
+      TAG: ${{ inputs.tag }}
+      ACCOUNT: ${{ vars.PACKAGES_STORAGE_ACCOUNT }}
+      ARTIFACT_PATH: org/opengroup/osdu/core-lib-azure
+      CI_JOB_TOKEN: ""
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Resolve version
+        run: |
+          if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Tag $TAG is not of the form vX.Y.Z"
+            exit 1
+          fi
+          echo "VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Stage current metadata
+        run: |
+          blob() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors; }
+          pom="maven/$ARTIFACT_PATH/$VERSION/core-lib-azure-$VERSION.pom"
+          if [ "$(blob exists --name "$pom" --query exists -o tsv)" = true ]; then
+            echo "::error::core-lib-azure $VERSION is already published; released versions are never replaced"
+            exit 1
+          fi
+          mkdir -p "staging/$ARTIFACT_PATH"
+          metadata="maven/$ARTIFACT_PATH/maven-metadata.xml"
+          if [ "$(blob exists --name "$metadata" --query exists -o tsv)" = true ]; then
+            blob download --name "$metadata" --file "staging/$ARTIFACT_PATH/maven-metadata.xml" --no-progress >/dev/null
+          fi
+
+      - name: Build and deploy to staging
+        run: |
+          # Consumers need a literal <version>; -Drevision would publish the pom with ${revision} in it.
+          mvn -B -ntp --settings .mvn/community-maven.settings.xml \
+            org.codehaus.mojo:versions-maven-plugin:2.18.0:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
+          mvn -B -ntp --settings .mvn/community-maven.settings.xml \
+            -DaltDeploymentRepository="staging::file://$GITHUB_WORKSPACE/staging" deploy
+
+      - name: Upload
+        run: |
+          batch() { az storage blob upload-batch --account-name "$ACCOUNT" --auth-mode login --destination '$web' --no-progress --only-show-errors "$@" >/dev/null; }
+          batch --source "staging/$ARTIFACT_PATH/$VERSION" --destination-path "maven/$ARTIFACT_PATH/$VERSION" --overwrite false
+          batch --source "staging/$ARTIFACT_PATH" --destination-path "maven/$ARTIFACT_PATH" --pattern 'maven-metadata.xml*' --overwrite true --content-cache-control no-cache
+
+      - name: Summary
+        run: |
+          url="${{ vars.PACKAGES_URL }}/maven"
+          {
+            echo "### core-lib-azure $VERSION published"
+            echo
+            echo "Repository URL: \`$url\`"
+            echo
+            find "staging/$ARTIFACT_PATH" -type f | sed "s|^staging/|- $url/|"
+          } >> "$GITHUB_STEP_SUMMARY"
