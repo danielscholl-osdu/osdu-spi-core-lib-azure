@@ -64,7 +64,7 @@ public final class AzureServicePrincipal {
     private static final Duration AZURE_AD_TIMEOUT = Duration.ofSeconds(30);
 
 
-    /**
+    /*
      * Comparison of Token Acquisition Methods:
      *
      * | Feature                   | getMSIToken                              | getWIToken                              | getIdToken                               |
