@@ -1,0 +1,43 @@
+version: 2
+updates:
+  # Merged dependency bumps release as a patch (fix), so services pick up CVE fixes promptly.
+  # Major versions are taken by hand: they change the library's contract and need a major release.
+  - package-ecosystem: "maven"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "fix"
+      include: "scope"
+    groups:
+      maven-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    ignore:
+      - dependency-name: "*"
+        update-types:
+          - "version-update:semver-major"
+
+  # Workflow actions are owned by this repository, unlike the forks, which take them from the template.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+    target-branch: "main"
+    labels:
+      - "dependencies"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      github-actions:
+        patterns:
+          - "*"

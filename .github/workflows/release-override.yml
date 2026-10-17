@@ -1,0 +1,84 @@
+name: Release Override
+
+# Conventional commits pick the next version on their own: fix is a patch, feat is a minor,
+# and "!" or a BREAKING CHANGE footer is a major. This workflow forces a version instead,
+# by opening a PR whose commit carries a Release-As footer that release-please honors.
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: 'Version part to bump from the current release'
+        type: choice
+        options: [major, minor, patch]
+        default: major
+      version:
+        description: 'Exact version (X.Y.Z); overrides bump when set'
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  request-version:
+    name: "🎯 Request Release Version"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Generate GitHub App Token"
+        # An App token, so the PR it opens triggers Validation and CodeQL.
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1  # v3.2.0
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: "Checkout Code"
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: "Resolve Version"
+        env:
+          BUMP: ${{ inputs.bump }}
+          EXPLICIT: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          CURRENT=$(jq -r '."."' .release-please-manifest.json)
+          IFS=. read -r MAJOR MINOR PATCH <<< "$CURRENT"
+          if [ -n "$EXPLICIT" ]; then
+            if [[ ! "$EXPLICIT" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Version '$EXPLICIT' is not of the form X.Y.Z"; exit 1
+            fi
+            NEXT="$EXPLICIT"
+          else
+            case "$BUMP" in
+              major) NEXT="$((MAJOR + 1)).0.0" ;;
+              minor) NEXT="$MAJOR.$((MINOR + 1)).0" ;;
+              patch) NEXT="$MAJOR.$MINOR.$((PATCH + 1))" ;;
+            esac
+          fi
+          if [ "$(printf '%s\n%s\n' "$CURRENT" "$NEXT" | sort -V | tail -n1)" != "$NEXT" ] || [ "$NEXT" = "$CURRENT" ]; then
+            echo "::error::$NEXT is not newer than the current release $CURRENT"; exit 1
+          fi
+          echo "CURRENT=$CURRENT" >> "$GITHUB_ENV"
+          echo "NEXT=$NEXT" >> "$GITHUB_ENV"
+
+      - name: "Open Release-As PR"
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -euo pipefail
+          BRANCH="release-as/v$NEXT"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null; then
+            echo "::error::Branch $BRANCH already exists; merge or close its PR first"; exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git commit --allow-empty -m "chore: release $NEXT" -m "Release-As: $NEXT"
+          git push origin "$BRANCH"
+          BODY=$(printf '%s\n\n%s\n' \
+            "Merging this sets the next release to **$NEXT** (current: $CURRENT). release-please then updates its release PR to $NEXT." \
+            "Release-As: $NEXT")
+          URL=$(gh pr create --base main --head "$BRANCH" --title "chore: release $NEXT" --body "$BODY")
+          echo "Opened $URL for $NEXT" >> "$GITHUB_STEP_SUMMARY"
