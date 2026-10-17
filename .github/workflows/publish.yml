@@ -35,6 +35,8 @@ jobs:
       ARTIFACT_PATH: org/opengroup/osdu/core-lib-azure
       CI_JOB_TOKEN: ""
       GH_TOKEN: ${{ github.token }}
+      # Versions below this were released from GitLab; they are only ever published from attached assets.
+      BUILD_FLOOR: 3.1.0
     steps:
       - name: "Resolve Version"
         run: |
@@ -77,9 +79,23 @@ jobs:
       - name: "Find Release Assets"
         id: assets
         run: |
-          names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if ! names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name' 2>/dev/null)"; then
+            echo "::error::$TAG has no GitHub release. For a version released before the move, run .github/scripts/attach-release-assets.sh first"
+            exit 1
+          fi
           if grep -qx "$JAR" <<<"$names" && grep -qx "$POM" <<<"$names"; then
             echo "attached=true" >> "$GITHUB_OUTPUT"
+          elif [ "${METADATA_ONLY:-}" = true ]; then
+            # The host already serves this version's files, so attach those rather than a rebuild with different bytes.
+            for f in "$JAR" "$POM"; do
+              az storage blob download --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors \
+                --name "maven/$ARTIFACT_PATH/$VERSION/$f" --file "assets/$f" --no-progress >/dev/null
+            done
+            gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" "assets/$JAR" "assets/$POM" --clobber
+            echo "attached=true" >> "$GITHUB_OUTPUT"
+          elif [ "$(printf '%s\n' "$BUILD_FLOOR" "$VERSION" | sort -V | head -n1)" != "$BUILD_FLOOR" ]; then
+            echo "::error::$VERSION predates $BUILD_FLOOR, so it is never rebuilt; attach its GitLab jar and pom with .github/scripts/attach-release-assets.sh"
+            exit 1
           fi
 
       - name: "Checkout Code"

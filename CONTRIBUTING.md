@@ -21,7 +21,7 @@ To release a version the commits would not produce, such as a major for a change
 
 ## Trying a change in a service before release
 
-Run **Pre-release** from the Actions tab on your branch. It publishes `<version>-<branch>-<hash>-SNAPSHOT` to `<host>/maven-snapshots`, where the hash is a short digest of the branch name, and each run replaces the last one. The run summary shows the exact version to pin. Point the service fork at it by adding that URL as a repository with snapshots enabled and pinning the snapshot version. Snapshots expire 30 days after their last upload.
+Run **Pre-release** from the Actions tab on your branch. It publishes `<version>-<branch>-<hash>-SNAPSHOT` to `<host>/maven-snapshots`, where the hash is a short digest of the branch name. `<version>` is the current release, so the label names the base the branch started from, not the next version. Each run adds a new timestamped build and points the snapshot at it; the run summary shows the exact version to pin. A laptop that already resolved the snapshot needs `mvn -U` to pick up a newer build. Point the service fork at it by adding that URL as a repository with snapshots enabled and pinning the snapshot version. Each build expires 30 days after its upload.
 
 Without the workflow, `mvn install` puts the library in your local repository, where a local service build finds it.
 
