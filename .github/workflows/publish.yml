@@ -1,5 +1,8 @@
 name: Publish
 
+# Puts a release on the package host. The jar and pom attached to the GitHub release are the
+# source: Publish builds and attaches them when the release has none, and otherwise uploads
+# what is attached, so dispatching it for a tag the host lacks restores that version.
 on:
   workflow_call:
     inputs:
@@ -9,12 +12,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Release tag to publish, for example v3.1.0
+        description: Release tag to publish or restore, for example v3.1.0
         type: string
         required: true
 
 permissions:
-  contents: read
+  contents: write
   id-token: write
 
 concurrency:
@@ -31,26 +34,18 @@ jobs:
       ACCOUNT: ${{ vars.PACKAGES_STORAGE_ACCOUNT }}
       ARTIFACT_PATH: org/opengroup/osdu/core-lib-azure
       CI_JOB_TOKEN: ""
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: "Checkout Code"
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
-        with:
-          ref: ${{ inputs.tag }}
-
-      - name: "Setup Java Environment"
-        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'maven'
-
       - name: "Resolve Version"
         run: |
           if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "::error::Tag $TAG is not of the form vX.Y.Z"
             exit 1
           fi
-          echo "VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
+          VERSION="${BASH_REMATCH[1]}"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "JAR=core-lib-azure-$VERSION.jar" >> "$GITHUB_ENV"
+          echo "POM=core-lib-azure-$VERSION.pom" >> "$GITHUB_ENV"
 
       - name: "Azure Login"
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906  # v3.1.0
@@ -62,30 +57,77 @@ jobs:
       - name: "Stage Current Metadata"
         run: |
           blob() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors; }
-          pom="maven/$ARTIFACT_PATH/$VERSION/core-lib-azure-$VERSION.pom"
-          if [ "$(blob exists --name "$pom" --query exists -o tsv)" = true ]; then
+          # The pom is uploaded last, so a version without one was never published and may be replaced.
+          if [ "$(blob exists --name "maven/$ARTIFACT_PATH/$VERSION/$POM" --query exists -o tsv)" = true ]; then
             echo "::error::core-lib-azure $VERSION is already published; released versions are never replaced"
             exit 1
           fi
-          mkdir -p "staging/$ARTIFACT_PATH"
+          mkdir -p "staging/$ARTIFACT_PATH" assets
           metadata="maven/$ARTIFACT_PATH/maven-metadata.xml"
           if [ "$(blob exists --name "$metadata" --query exists -o tsv)" = true ]; then
             blob download --name "$metadata" --file "staging/$ARTIFACT_PATH/maven-metadata.xml" --no-progress >/dev/null
           fi
 
-      - name: "Build and Deploy to Staging"
+      - name: "Find Release Assets"
+        id: assets
+        run: |
+          names="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          if grep -qx "$JAR" <<<"$names" && grep -qx "$POM" <<<"$names"; then
+            echo "attached=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: "Checkout Code"
+        if: steps.assets.outputs.attached != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: ${{ inputs.tag }}
+          path: src
+
+      - name: "Setup Java Environment"
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: "Build and Attach"
+        if: steps.assets.outputs.attached != 'true'
+        working-directory: src
         run: |
           # Consumers need a literal <version>; -Drevision would publish the pom with ${revision} in it.
           mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml \
             org.codehaus.mojo:versions-maven-plugin:2.18.0:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
-          mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml \
-            -DaltDeploymentRepository="staging::file://$GITHUB_WORKSPACE/staging" deploy
+          mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml verify
+          cp "target/$JAR" "../assets/$JAR"
+          cp pom.xml "../assets/$POM"
+          gh release upload "$TAG" "../assets/$JAR" "../assets/$POM" --clobber
+
+      - name: "Download Release Assets"
+        if: steps.assets.outputs.attached == 'true'
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --pattern "$JAR" --pattern "$POM"
+
+      - name: "Deploy to Staging"
+        run: |
+          mvn --batch-mode --no-transfer-progress org.apache.maven.plugins:maven-deploy-plugin:3.1.4:deploy-file \
+            -Dfile="assets/$JAR" -DpomFile="assets/$POM" -DgeneratePom=false \
+            -DrepositoryId=staging -Durl="file://$GITHUB_WORKSPACE/staging"
+          # Maven records the version just deployed as the release; a restored older version must not displace the newest.
+          metadata="staging/$ARTIFACT_PATH/maven-metadata.xml"
+          newest="$(grep -o '<version>[^<]*</version>' "$metadata" | sed 's/<[^>]*>//g' | sort -V | tail -n1)"
+          sed -i "s|<release>.*</release>|<release>$newest</release>|; s|<latest>.*</latest>|<latest>$newest</latest>|" "$metadata"
+          md5sum "$metadata" | cut -d' ' -f1 > "$metadata.md5"
+          sha1sum "$metadata" | cut -d' ' -f1 > "$metadata.sha1"
 
       - name: "Upload"
         run: |
-          batch() { az storage blob upload-batch --account-name "$ACCOUNT" --auth-mode login --destination '$web' --no-progress --only-show-errors "$@" >/dev/null; }
-          batch --source "staging/$ARTIFACT_PATH/$VERSION" --destination-path "maven/$ARTIFACT_PATH/$VERSION" --overwrite false
-          batch --source "staging/$ARTIFACT_PATH" --destination-path "maven/$ARTIFACT_PATH" --pattern 'maven-metadata.xml*' --overwrite true --content-cache-control no-cache
+          up() { az storage blob upload --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --no-progress --only-show-errors --file "$1" --name "maven/${1#staging/}" "${@:2}" >/dev/null; }
+          dir="staging/$ARTIFACT_PATH/$VERSION"
+          for f in "$dir"/*; do
+            [ "$f" = "$dir/$POM" ] || up "$f" --overwrite true
+          done
+          up "$dir/$POM" --overwrite false
+          for f in "staging/$ARTIFACT_PATH"/maven-metadata.xml*; do
+            up "$f" --overwrite true --content-cache-control no-cache
+          done
 
       - name: "Summary"
         env:
@@ -97,5 +139,5 @@ jobs:
             echo
             echo "Repository URL: \`$url\`"
             echo
-            find "staging/$ARTIFACT_PATH" -type f | sed "s|^staging/|- $url/|"
+            find "staging/$ARTIFACT_PATH" -type f | sort | sed "s|^staging/|- $url/|"
           } >> "$GITHUB_STEP_SUMMARY"
