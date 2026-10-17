@@ -23,6 +23,9 @@ updates:
       - dependency-name: "*"
         update-types:
           - "version-update:semver-major"
+      # os-core-common is paired with library versions by hand, and the GitLab registry
+      # refuses Dependabot's anonymous version listing.
+      - dependency-name: "org.opengroup.osdu:*"
 
   # Workflow actions are owned by this repository, unlike the forks, which take them from the template.
   - package-ecosystem: "github-actions"
