@@ -1,8 +1,8 @@
 name: Pre-release
 
 # Publishes a branch as <version>-<branch>-<hash>-SNAPSHOT under maven-snapshots, so a fork can prove a
-# library change before it is released. Each run replaces that snapshot; the host expires
-# snapshots 30 days after their last upload.
+# library change before it is released. Each run adds a timestamped build and points the snapshot
+# at it; the host expires each build 30 days after its upload.
 on:
   workflow_dispatch:
 
@@ -54,13 +54,15 @@ jobs:
 
       - name: "Stage Current Metadata"
         run: |
-          mkdir -p "staging/$ARTIFACT_PATH"
-          metadata="$PREFIX/$ARTIFACT_PATH/maven-metadata.xml"
-          exists="$(az storage blob exists --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --name "$metadata" --query exists -o tsv)"
-          if [ "$exists" = true ]; then
-            az storage blob download --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors \
-              --name "$metadata" --file "staging/$ARTIFACT_PATH/maven-metadata.xml" --no-progress >/dev/null
-          fi
+          blob() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors; }
+          # Both indexes: the artifact's version list, and this snapshot's build list so the build number advances.
+          for dir in "$ARTIFACT_PATH" "$ARTIFACT_PATH/$VERSION"; do
+            mkdir -p "staging/$dir"
+            exists="$(blob exists --name "$PREFIX/$dir/maven-metadata.xml" --query exists -o tsv)"
+            if [ "$exists" = true ]; then
+              blob download --name "$PREFIX/$dir/maven-metadata.xml" --file "staging/$dir/maven-metadata.xml" --no-progress >/dev/null
+            fi
+          done
 
       - name: "Build and Deploy to Staging"
         run: |
@@ -72,7 +74,6 @@ jobs:
       - name: "Upload"
         run: |
           batch() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --only-show-errors >/dev/null; }
-          batch delete-batch --source '$web' --pattern "$PREFIX/$ARTIFACT_PATH/$VERSION/*"
           batch upload-batch --no-progress --destination '$web' --source "staging/$ARTIFACT_PATH/$VERSION" --destination-path "$PREFIX/$ARTIFACT_PATH/$VERSION" --overwrite true --content-cache-control no-cache
           batch upload-batch --no-progress --destination '$web' --source "staging/$ARTIFACT_PATH" --destination-path "$PREFIX/$ARTIFACT_PATH" --pattern 'maven-metadata.xml*' --overwrite true --content-cache-control no-cache
 
