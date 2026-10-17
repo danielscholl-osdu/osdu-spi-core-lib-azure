@@ -1,6 +1,6 @@
 name: Pre-release
 
-# Publishes a branch as <version>-<branch>-SNAPSHOT under maven-snapshots, so a fork can prove a
+# Publishes a branch as <version>-<branch>-<hash>-SNAPSHOT under maven-snapshots, so a fork can prove a
 # library change before it is released. Each run replaces that snapshot; the host expires
 # snapshots 30 days after their last upload.
 on:
