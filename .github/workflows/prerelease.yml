@@ -41,7 +41,9 @@ jobs:
         run: |
           base="$(jq -r '."."' .release-please-manifest.json)"
           slug="$(tr '[:upper:]' '[:lower:]' <<<"$BRANCH" | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')"
-          echo "VERSION=$base-$slug-SNAPSHOT" >> "$GITHUB_ENV"
+          # The hash keeps branches whose names differ only in punctuation (feature/foo, feature-foo) apart.
+          hash="$(printf '%s' "$BRANCH" | sha1sum | cut -c1-7)"
+          echo "VERSION=$base-$slug-$hash-SNAPSHOT" >> "$GITHUB_ENV"
 
       - name: "Azure Login"
         uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906  # v3.1.0
@@ -54,7 +56,8 @@ jobs:
         run: |
           mkdir -p "staging/$ARTIFACT_PATH"
           metadata="$PREFIX/$ARTIFACT_PATH/maven-metadata.xml"
-          if [ "$(az storage blob exists --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --name "$metadata" --query exists -o tsv)" = true ]; then
+          exists="$(az storage blob exists --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --name "$metadata" --query exists -o tsv)"
+          if [ "$exists" = true ]; then
             az storage blob download --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors \
               --name "$metadata" --file "staging/$ARTIFACT_PATH/maven-metadata.xml" --no-progress >/dev/null
           fi
@@ -68,10 +71,10 @@ jobs:
 
       - name: "Upload"
         run: |
-          batch() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --no-progress --only-show-errors >/dev/null; }
+          batch() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --only-show-errors >/dev/null; }
           batch delete-batch --source '$web' --pattern "$PREFIX/$ARTIFACT_PATH/$VERSION/*"
-          batch upload-batch --destination '$web' --source "staging/$ARTIFACT_PATH/$VERSION" --destination-path "$PREFIX/$ARTIFACT_PATH/$VERSION" --overwrite true --content-cache-control no-cache
-          batch upload-batch --destination '$web' --source "staging/$ARTIFACT_PATH" --destination-path "$PREFIX/$ARTIFACT_PATH" --pattern 'maven-metadata.xml*' --overwrite true --content-cache-control no-cache
+          batch upload-batch --no-progress --destination '$web' --source "staging/$ARTIFACT_PATH/$VERSION" --destination-path "$PREFIX/$ARTIFACT_PATH/$VERSION" --overwrite true --content-cache-control no-cache
+          batch upload-batch --no-progress --destination '$web' --source "staging/$ARTIFACT_PATH" --destination-path "$PREFIX/$ARTIFACT_PATH" --pattern 'maven-metadata.xml*' --overwrite true --content-cache-control no-cache
 
       - name: "Summary"
         env:

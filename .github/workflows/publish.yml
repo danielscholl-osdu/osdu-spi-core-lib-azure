@@ -57,15 +57,21 @@ jobs:
       - name: "Stage Current Metadata"
         run: |
           blob() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors; }
-          # The pom is uploaded last, so a version without one was never published and may be replaced.
-          if [ "$(blob exists --name "maven/$ARTIFACT_PATH/$VERSION/$POM" --query exists -o tsv)" = true ]; then
-            echo "::error::core-lib-azure $VERSION is already published; released versions are never replaced"
-            exit 1
-          fi
           mkdir -p "staging/$ARTIFACT_PATH" assets
           metadata="maven/$ARTIFACT_PATH/maven-metadata.xml"
-          if [ "$(blob exists --name "$metadata" --query exists -o tsv)" = true ]; then
+          pom_exists="$(blob exists --name "maven/$ARTIFACT_PATH/$VERSION/$POM" --query exists -o tsv)"
+          metadata_exists="$(blob exists --name "$metadata" --query exists -o tsv)"
+          if [ "$metadata_exists" = true ]; then
             blob download --name "$metadata" --file "staging/$ARTIFACT_PATH/maven-metadata.xml" --no-progress >/dev/null
+          fi
+          # The pom marks a version's files complete and the metadata entry marks it published.
+          if [ "$pom_exists" = true ]; then
+            if grep -qF "<version>$VERSION</version>" "staging/$ARTIFACT_PATH/maven-metadata.xml" 2>/dev/null; then
+              echo "::error::core-lib-azure $VERSION is already published; released versions are never replaced"
+              exit 1
+            fi
+            echo "::warning::core-lib-azure $VERSION files are on the host but the metadata does not list it; updating the metadata only"
+            echo "METADATA_ONLY=true" >> "$GITHUB_ENV"
           fi
 
       - name: "Find Release Assets"
@@ -121,11 +127,15 @@ jobs:
         run: |
           up() { az storage blob upload --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --no-progress --only-show-errors --file "$1" --name "maven/${1#staging/}" "${@:2}" >/dev/null; }
           dir="staging/$ARTIFACT_PATH/$VERSION"
-          for f in "$dir"/*; do
-            [ "$f" = "$dir/$POM" ] || up "$f" --overwrite true
-          done
-          up "$dir/$POM" --overwrite false
-          for f in "staging/$ARTIFACT_PATH"/maven-metadata.xml*; do
+          if [ "${METADATA_ONLY:-}" != true ]; then
+            for f in "$dir"/*; do
+              [ "$f" = "$dir/$POM" ] || up "$f" --overwrite true
+            done
+            up "$dir/$POM" --overwrite false
+          fi
+          # Checksums before the index, so an interrupted run leaves the version unlisted and re-runnable.
+          meta="staging/$ARTIFACT_PATH/maven-metadata.xml"
+          for f in "$meta.md5" "$meta.sha1" "$meta"; do
             up "$f" --overwrite true --content-cache-control no-cache
           done
 

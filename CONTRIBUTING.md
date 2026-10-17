@@ -21,13 +21,13 @@ To release a version the commits would not produce, such as a major for a change
 
 ## Trying a change in a service before release
 
-Run **Pre-release** from the Actions tab on your branch. It publishes `<version>-<branch>-SNAPSHOT` to `<host>/maven-snapshots`, and each run replaces the last one. Point the service fork at it by adding that URL as a repository with snapshots enabled and pinning the snapshot version. Snapshots expire 30 days after their last upload.
+Run **Pre-release** from the Actions tab on your branch. It publishes `<version>-<branch>-<hash>-SNAPSHOT` to `<host>/maven-snapshots`, where the hash is a short digest of the branch name, and each run replaces the last one. The run summary shows the exact version to pin. Point the service fork at it by adding that URL as a repository with snapshots enabled and pinning the snapshot version. Snapshots expire 30 days after their last upload.
 
 Without the workflow, `mvn install` puts the library in your local repository, where a local service build finds it.
 
 ## Restoring the package host
 
-The GitHub releases hold every published jar and pom. If the host loses a version, run **Publish** with that tag: it uploads the attached files without rebuilding. Publish refuses a version whose pom is already on the host, and replaces the rest of a version that has no pom, which is how an interrupted upload is finished.
+The GitHub releases hold every published jar and pom. If the host loses a version, run **Publish** with that tag: it uploads the attached files without rebuilding. Publish refuses a version the host's metadata already lists. An interrupted run is finished by running it again: a version without its pom gets all its files replaced, and a version with its pom but no metadata entry gets the metadata only.
 
 ## Dependencies
 
