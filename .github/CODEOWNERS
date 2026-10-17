@@ -1,0 +1,7 @@
+# The Default Branch Protection ruleset requires a code-owner review on main. Last match wins.
+*                               @danielscholl
+
+# Engineering system: workflows, governance and release configuration.
+/.github/                       @danielscholl
+/.release-please-config.json    @danielscholl
+/.release-please-manifest.json  @danielscholl

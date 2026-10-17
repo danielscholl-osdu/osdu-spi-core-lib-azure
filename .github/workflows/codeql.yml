@@ -1,0 +1,110 @@
+name: CodeQL Analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Mondays at 6 AM UTC
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+jobs:
+  check-paths:
+    name: Check if Code Changes Present
+    runs-on: ubuntu-latest
+    outputs:
+      should-run: ${{ steps.filter.outputs.should-run }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Check for code changes
+        id: filter
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BASE: ${{ github.event.before }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          case "$EVENT_NAME" in
+            push) BASE_SHA="$PUSH_BASE"; HEAD_SHA="$GITHUB_SHA" ;;
+            pull_request) BASE_SHA="$PR_BASE"; HEAD_SHA="$PR_HEAD" ;;
+            *) echo "should-run=true" >> $GITHUB_OUTPUT; exit 0 ;;
+          esac
+
+          CHANGED_FILES=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" || echo "")
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Skip only when every changed file is Markdown, which is not an analyzed language.
+          if grep -qv '\.md$' <<< "$CHANGED_FILES"; then
+            echo "should-run=true" >> $GITHUB_OUTPUT
+          else
+            echo "should-run=false" >> $GITHUB_OUTPUT
+            echo "Skipping CodeQL: only Markdown files changed"
+          fi
+
+  analyze:
+    name: Analyze Code
+    needs: check-paths
+    if: needs.check-paths.outputs.should-run == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [java-kotlin, actions]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@f443b600d91635bebf5b0d9ebc620189c0d6fba5  # v4.30.8
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+          build-mode: none
+          config: |
+            paths-ignore:
+              - '**/target/**'
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@f443b600d91635bebf5b0d9ebc620189c0d6fba5  # v4.30.8
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  # Summary job reporting as "CodeQL", the required check context in the default-branch ruleset.
+  CodeQL:
+    name: CodeQL
+    runs-on: ubuntu-latest
+    needs: [check-paths, analyze]
+    if: always()
+    steps:
+      - name: Report CodeQL Status
+        env:
+          PATHS_RESULT: ${{ needs.check-paths.result }}
+          SHOULD_RUN: ${{ needs.check-paths.outputs.should-run }}
+          ANALYZE_RESULT: ${{ needs.analyze.result }}
+        run: |
+          if [ "$PATHS_RESULT" != "success" ]; then
+            echo "❌ Code path check failed"; exit 1
+          fi
+          if [ "$SHOULD_RUN" = "false" ]; then
+            echo "✅ CodeQL skipped - only Markdown files changed"; exit 0
+          fi
+          if [ "$ANALYZE_RESULT" != "success" ]; then
+            echo "❌ CodeQL analysis did not succeed ($ANALYZE_RESULT)"; exit 1
+          fi
+          echo "✅ CodeQL analysis completed"

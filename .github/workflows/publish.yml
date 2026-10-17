@@ -23,6 +23,7 @@ concurrency:
 
 jobs:
   maven:
+    name: "Publish Maven Artifacts"
     runs-on: ubuntu-latest
     environment: publish
     env:
@@ -31,17 +32,19 @@ jobs:
       ARTIFACT_PATH: org/opengroup/osdu/core-lib-azure
       CI_JOB_TOKEN: ""
     steps:
-      - uses: actions/checkout@v4
+      - name: "Checkout Code"
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
         with:
           ref: ${{ inputs.tag }}
 
-      - uses: actions/setup-java@v4
+      - name: "Setup Java Environment"
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
         with:
-          distribution: temurin
-          java-version: "17"
-          cache: maven
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
 
-      - name: Resolve version
+      - name: "Resolve Version"
         run: |
           if [[ ! "$TAG" =~ ^v([0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
             echo "::error::Tag $TAG is not of the form vX.Y.Z"
@@ -49,13 +52,14 @@ jobs:
           fi
           echo "VERSION=${BASH_REMATCH[1]}" >> "$GITHUB_ENV"
 
-      - uses: azure/login@v2
+      - name: "Azure Login"
+        uses: azure/login@7ddb5af1ef8758cf1353cf3b42f940aee27ba21c  # v3.0.2
         with:
           client-id: ${{ vars.AZURE_CLIENT_ID }}
           tenant-id: ${{ vars.AZURE_TENANT_ID }}
           subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
 
-      - name: Stage current metadata
+      - name: "Stage Current Metadata"
         run: |
           blob() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors; }
           pom="maven/$ARTIFACT_PATH/$VERSION/core-lib-azure-$VERSION.pom"
@@ -69,23 +73,25 @@ jobs:
             blob download --name "$metadata" --file "staging/$ARTIFACT_PATH/maven-metadata.xml" --no-progress >/dev/null
           fi
 
-      - name: Build and deploy to staging
+      - name: "Build and Deploy to Staging"
         run: |
           # Consumers need a literal <version>; -Drevision would publish the pom with ${revision} in it.
-          mvn -B -ntp --settings .mvn/community-maven.settings.xml \
+          mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml \
             org.codehaus.mojo:versions-maven-plugin:2.18.0:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
-          mvn -B -ntp --settings .mvn/community-maven.settings.xml \
+          mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml \
             -DaltDeploymentRepository="staging::file://$GITHUB_WORKSPACE/staging" deploy
 
-      - name: Upload
+      - name: "Upload"
         run: |
           batch() { az storage blob upload-batch --account-name "$ACCOUNT" --auth-mode login --destination '$web' --no-progress --only-show-errors "$@" >/dev/null; }
           batch --source "staging/$ARTIFACT_PATH/$VERSION" --destination-path "maven/$ARTIFACT_PATH/$VERSION" --overwrite false
           batch --source "staging/$ARTIFACT_PATH" --destination-path "maven/$ARTIFACT_PATH" --pattern 'maven-metadata.xml*' --overwrite true --content-cache-control no-cache
 
-      - name: Summary
+      - name: "Summary"
+        env:
+          PACKAGES_URL: ${{ vars.PACKAGES_URL }}
         run: |
-          url="${{ vars.PACKAGES_URL }}/maven"
+          url="$PACKAGES_URL/maven"
           {
             echo "### core-lib-azure $VERSION published"
             echo

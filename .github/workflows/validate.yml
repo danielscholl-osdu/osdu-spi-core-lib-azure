@@ -1,0 +1,133 @@
+name: Validation
+
+on:
+  # No paths-ignore: a path-skipped workflow leaves the required "Validation Summary" check
+  # Pending and wedges the PR.
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: validation-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The community settings send this as a GitLab Job-Token header; empty means an anonymous read.
+  CI_JOB_TOKEN: ""
+
+jobs:
+  code-validation:
+    name: "Check Code Quality"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+
+      - name: "Validate PR Title"
+        # Squash merges use the PR title as the commit on main, which release-please reads.
+        if: github.event_name == 'pull_request'
+        uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50  # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          types: |
+            feat
+            fix
+            docs
+            style
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+
+      - name: "Setup Java Environment"
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: "Lint"
+        run: mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml checkstyle:check
+
+  java-build:
+    name: "Java Build"
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd  # v5.0.1
+
+      - name: "Setup Java Environment"
+        uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654  # v5.2.0
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: "Build and Test"
+        run: |
+          mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml clean verify
+
+          echo "# Test Coverage Report" >> $GITHUB_STEP_SUMMARY
+          echo "## Summary" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          find . -name "index.html" -path "*/target/site/jacoco/*" -exec grep -o '<tfoot>.*</tfoot>' {} \; | sed 's/<[^>]*>//g' >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: "Upload Build Artifacts"
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: build-artifacts
+          path: |
+            target/*.jar
+            target/surefire-reports/
+            target/site/jacoco/
+          retention-days: 2
+
+  validation-summary:
+    # The required check: always reports, so one table shows what ran and the PR never wedges.
+    name: "Validation Summary"
+    needs: [code-validation, java-build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Summarize"
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          EVENT_NAME: ${{ github.event_name }}
+          REF_NAME: ${{ github.head_ref || github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          {
+            echo "## Validation on $EVENT_NAME ($REF_NAME)"
+            echo
+            echo "| Job | Result |"
+            echo "|---|---|"
+            jq -rn --argjson needs "$NEEDS" '
+              def names: {"code-validation": "Check Code Quality", "java-build": "Java Build"};
+              def icon: {success: "✅", failure: "❌", cancelled: "⚠️", skipped: "⏭️"}[.] // .;
+              names | keys_unsorted[] | select(in($needs)) | . as $job
+                | "| \(names[$job]) | \($needs[$job].result | icon) \($needs[$job].result) |"'
+            echo
+            echo "[Run]($RUN_URL)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "Report"
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          broken=$(jq -r 'to_entries[] | select(.value.result != "success") | .key' <<< "$NEEDS")
+          if [ -n "$broken" ]; then
+            echo "❌ did not pass: $(echo $broken | tr ' ' ',')"; exit 1
+          fi
+          echo "✅ Validation completed"
