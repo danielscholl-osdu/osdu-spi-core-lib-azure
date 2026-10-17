@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/compare/v3.1.0...v3.1.1) (2026-10-17)
+
+
+### ⚙️ Continuous Integration
+
+* Add validation, CodeQL, and repo governance workflows ([#2](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/issues/2)) ([acff522](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/commit/acff5220605f5c1b3de4c3c8fefd27ef9cd46e57))
+
 ## [3.1.0](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/compare/v3.0.4...v3.1.0) (2026-10-16)
 
 
