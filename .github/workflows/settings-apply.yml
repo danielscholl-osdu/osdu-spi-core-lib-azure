@@ -2,6 +2,7 @@ name: Settings Apply
 
 # Reconciles repository settings from files in .github, so governance is reviewed like code:
 #   - rulesets in .github/rulesets/*.json
+#   - deployment environments in .github/environments/*.json
 #   - merge settings in .github/merge-settings.json (squash only, PR title becomes the commit)
 #   - security settings in .github/security-on.json
 on:
@@ -18,6 +19,7 @@ on:
     branches: [main]
     paths:
       - '.github/rulesets/**'
+      - '.github/environments/**'
       - '.github/merge-settings.json'
       - '.github/security-on.json'
       - '.github/scripts/settings-apply.sh'
@@ -47,5 +49,6 @@ jobs:
       - name: "Apply Settings"
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_APP_ID: ${{ secrets.RELEASE_APP_ID }}
           DRY: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
         run: bash .github/scripts/settings-apply.sh "${{ github.repository }}" $DRY

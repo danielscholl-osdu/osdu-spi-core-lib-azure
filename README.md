@@ -111,7 +111,7 @@ A library change is proven in a service by pinning a release in that service's f
 
 ## Release
 
-Pull request titles follow Conventional Commits and pick the next version: `fix` is a patch, `feat` a minor, `feat!` or a `BREAKING CHANGE` footer a major. release-please keeps a release PR open; merging it tags `vX.Y.Z` and publishes the jar and pom to the Maven repository above. A released version is never replaced. [CONTRIBUTING.md](CONTRIBUTING.md) covers forcing a version and how Dependabot updates are released.
+Pull request titles follow Conventional Commits and pick the next version: `fix` is a patch, `feat` a minor, `feat!` or a `BREAKING CHANGE` footer a major. release-please keeps a release PR open; merging it tags `vX.Y.Z`, attaches the jar and pom to the GitHub release, and publishes them to the Maven repository above. A released version is never replaced. A branch can be published as a snapshot for testing in a service first. [CONTRIBUTING.md](CONTRIBUTING.md) covers snapshots, forcing a version, restoring the host, and how Dependabot updates are released.
 
 ## License
 

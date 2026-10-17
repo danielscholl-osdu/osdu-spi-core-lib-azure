@@ -1,0 +1,91 @@
+name: Pre-release
+
+# Publishes a branch as <version>-<branch>-<hash>-SNAPSHOT under maven-snapshots, so a fork can prove a
+# library change before it is released. Each run replaces that snapshot; the host expires
+# snapshots 30 days after their last upload.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: prerelease
+  cancel-in-progress: false
+
+jobs:
+  snapshot:
+    name: "Publish Snapshot"
+    runs-on: ubuntu-latest
+    environment: snapshot
+    env:
+      ACCOUNT: ${{ vars.PACKAGES_STORAGE_ACCOUNT }}
+      ARTIFACT_PATH: org/opengroup/osdu/core-lib-azure
+      PREFIX: maven-snapshots
+      CI_JOB_TOKEN: ""
+    steps:
+      - name: "Checkout Code"
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: "Setup Java Environment"
+        uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad  # v6.1.0
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: "Resolve Version"
+        env:
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          base="$(jq -r '."."' .release-please-manifest.json)"
+          slug="$(tr '[:upper:]' '[:lower:]' <<<"$BRANCH" | sed -E 's/[^a-z0-9]+/-/g; s/^-+|-+$//g')"
+          # The hash keeps branches whose names differ only in punctuation (feature/foo, feature-foo) apart.
+          hash="$(printf '%s' "$BRANCH" | sha1sum | cut -c1-7)"
+          echo "VERSION=$base-$slug-$hash-SNAPSHOT" >> "$GITHUB_ENV"
+
+      - name: "Azure Login"
+        uses: azure/login@a641126d1b8aa4d1fa005f4f92df94a3a4c4c906  # v3.1.0
+        with:
+          client-id: ${{ vars.AZURE_SNAPSHOT_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: "Stage Current Metadata"
+        run: |
+          mkdir -p "staging/$ARTIFACT_PATH"
+          metadata="$PREFIX/$ARTIFACT_PATH/maven-metadata.xml"
+          exists="$(az storage blob exists --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --name "$metadata" --query exists -o tsv)"
+          if [ "$exists" = true ]; then
+            az storage blob download --account-name "$ACCOUNT" --auth-mode login --container-name '$web' --only-show-errors \
+              --name "$metadata" --file "staging/$ARTIFACT_PATH/maven-metadata.xml" --no-progress >/dev/null
+          fi
+
+      - name: "Build and Deploy to Staging"
+        run: |
+          mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml \
+            org.codehaus.mojo:versions-maven-plugin:2.18.0:set -DnewVersion="$VERSION" -DgenerateBackupPoms=false
+          mvn --batch-mode --no-transfer-progress --settings=.mvn/community-maven.settings.xml \
+            -DaltDeploymentRepository="staging::file://$GITHUB_WORKSPACE/staging" deploy
+
+      - name: "Upload"
+        run: |
+          batch() { az storage blob "$@" --account-name "$ACCOUNT" --auth-mode login --only-show-errors >/dev/null; }
+          batch delete-batch --source '$web' --pattern "$PREFIX/$ARTIFACT_PATH/$VERSION/*"
+          batch upload-batch --no-progress --destination '$web' --source "staging/$ARTIFACT_PATH/$VERSION" --destination-path "$PREFIX/$ARTIFACT_PATH/$VERSION" --overwrite true --content-cache-control no-cache
+          batch upload-batch --no-progress --destination '$web' --source "staging/$ARTIFACT_PATH" --destination-path "$PREFIX/$ARTIFACT_PATH" --pattern 'maven-metadata.xml*' --overwrite true --content-cache-control no-cache
+
+      - name: "Summary"
+        env:
+          PACKAGES_URL: ${{ vars.PACKAGES_URL }}
+        run: |
+          {
+            echo "### core-lib-azure $VERSION published"
+            echo
+            echo "Repository URL: \`$PACKAGES_URL/$PREFIX\` (snapshots enabled)"
+            echo
+            echo '```xml'
+            echo "<core-lib-azure.version>$VERSION</core-lib-azure.version>"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

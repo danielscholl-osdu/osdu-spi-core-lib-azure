@@ -14,15 +14,16 @@
 # limitations under the License.
 
 #
-# Applies .github/rulesets/*.json (create or update by name), .github/merge-settings.json
-# and .github/security-on.json to the repository. Safe to run repeatedly.
+# Applies .github/rulesets/*.json (create or update by name), .github/environments/*.json,
+# .github/merge-settings.json and .github/security-on.json to the repository. Safe to run repeatedly.
 #
 # Arguments:
 #   $1          Repository full name (owner/repo)
 #   --dry-run   Print planned actions; no mutations
 #
 # Environment:
-#   GH_TOKEN    token with Administration write on the repository
+#   GH_TOKEN        token with Administration write on the repository
+#   RELEASE_APP_ID  the release App, substituted for "RELEASE_APP_ID" in ruleset bypass lists
 
 set -euo pipefail
 
@@ -40,13 +41,43 @@ run() {
 echo "Rulesets"
 for file in .github/rulesets/*.json; do
   name="$(jq -r '.name' "$file")"
+  if grep -q '"RELEASE_APP_ID"' "$file"; then
+    [[ "${RELEASE_APP_ID:-}" =~ ^[0-9]+$ ]] || { echo "  ❌ '$name' needs RELEASE_APP_ID"; exit 1; }
+  fi
+  body="$(jq --argjson app "${RELEASE_APP_ID:-0}" '(.bypass_actors[]? | select(.actor_id == "RELEASE_APP_ID") | .actor_id) |= $app' "$file")"
   id="$(gh api --paginate "repos/$REPO/rulesets" --jq ".[] | select(.name == \"$name\") | .id" | head -n1)"
   if [[ -n "$id" ]]; then
-    run gh api --method PUT "repos/$REPO/rulesets/$id" --input "$file" --silent
+    run gh api --method PUT "repos/$REPO/rulesets/$id" --input - --silent <<<"$body"
     echo "  ✅ updated '$name'"
   else
-    run gh api --method POST "repos/$REPO/rulesets" --input "$file" --silent
+    run gh api --method POST "repos/$REPO/rulesets" --input - --silent <<<"$body"
     echo "  ✅ created '$name'"
+  fi
+done
+
+echo "Environments"
+for file in .github/environments/*.json; do
+  name="$(jq -r '.name' "$file")"
+  if [[ "$(jq '.branches | length' "$file")" -gt 0 ]]; then
+    run gh api --method PUT "repos/$REPO/environments/$name" --input - --silent \
+      <<<'{"deployment_branch_policy":{"protected_branches":false,"custom_branch_policies":true}}'
+    current="$(gh api "repos/$REPO/environments/$name/deployment-branch-policies" \
+      --jq '.branch_policies[] | "\(.id) \(.type) \(.name)"' 2>/dev/null)" || current=""
+    while read -r pid ptype pname; do
+      [[ -n "$pid" ]] || continue
+      if [[ "$ptype" != branch ]] || ! jq -e --arg b "$pname" '.branches | index($b)' "$file" >/dev/null; then
+        run gh api --method DELETE "repos/$REPO/environments/$name/deployment-branch-policies/$pid" --silent
+      fi
+    done <<<"$current"
+    for branch in $(jq -r '.branches[]' "$file"); do
+      grep -qx "branch $branch" <<<"$(cut -d' ' -f2- <<<"$current")" ||
+        run gh api --method POST "repos/$REPO/environments/$name/deployment-branch-policies" \
+          -f name="$branch" -f type=branch --silent
+    done
+    echo "  ✅ '$name' deploys from $(jq -r '.branches | join(", ")' "$file")"
+  else
+    run gh api --method PUT "repos/$REPO/environments/$name" --input - --silent <<<'{"deployment_branch_policy":null}'
+    echo "  ✅ '$name' deploys from any branch"
   fi
 done
 
