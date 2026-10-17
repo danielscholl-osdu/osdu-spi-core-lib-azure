@@ -125,7 +125,7 @@ jobs:
 
       - name: "Download Release Assets"
         if: steps.assets.outputs.attached == 'true'
-        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --pattern "$JAR" --pattern "$POM"
+        run: gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir assets --pattern "$JAR" --pattern "$POM" --clobber
 
       - name: "Deploy to Staging"
         run: |
