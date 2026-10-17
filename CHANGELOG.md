@@ -1,5 +1,12 @@
 # Changelog
 
+## [3.1.1](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/compare/v3.1.0...v3.1.1) (2026-10-17)
+
+
+### 🐛 Bug Fixes
+
+* **deps:** Batch Dependabot updates, including async-http-client and okhttp CVE fixes ([#13](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/issues/13)) ([4e661c4](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/commit/4e661c4dfdf9c091b1077470380e2d895386b729))
+
 ## [3.1.0](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/compare/v3.0.4...v3.1.0) (2026-10-16)
 
 
