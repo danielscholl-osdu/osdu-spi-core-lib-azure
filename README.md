@@ -1,124 +1,120 @@
-Copyright 2017-2019 Schlumberger
+# OSDU Core Library for Azure
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
+[![Release](https://img.shields.io/github/v/release/danielscholl-osdu/osdu-spi-core-lib-azure)](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/releases)
+[![Validate](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/danielscholl-osdu/osdu-spi-core-lib-azure/actions/workflows/validate.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-     http://www.apache.org/licenses/LICENSE-2.0
+> [!NOTE]
+> This library began in the [OSDU community project](https://community.opengroup.org/osdu/platform/system/lib/cloud/azure/os-core-lib-azure) and carries its history. Releases from `3.1.0` on are built and published here; `3.0.4` and earlier stay in the community registry.
 
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+core-lib-azure is the shared Azure layer for OSDU services: clients and configuration for Cosmos DB, Blob and Data Lake Storage, Key Vault, Service Bus, Event Grid and Redis, plus the partition, entitlements and legal clients, logging, and HTTP resiliency that every Azure provider uses.
 
-# Introduction
+## At a glance
 
-This repository houses code that is used across the Microsoft Azure hosted OSDU and OpenDES platforms. The intention of this repository is to minimize code duplication for common scenarios such as dependency configuration for services in Azure (KeyVault, Cosmos, Storage and others).
- 
-# Pre-requisites
+| | |
+|---|---|
+| Maven coordinates | `org.opengroup.osdu:core-lib-azure` |
+| Maven repository | `https://spipackagesproto.z1.web.core.windows.net/maven` |
+| Java | 17 |
+| Depends on | `org.opengroup.osdu:os-core-common`, from the OSDU community registry |
+| Used by | The Azure provider of each `osdu-spi-<service>` |
 
-You need
+## Use it
 
-- [Maven 3.8.0+](https://maven.apache.org/download.cgi)
-- [JDK17](https://adoptopenjdk.net/)
-
-# Local Usage
-
-```bash
-# Compile the codebase
-$ mvn compile
-...
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD SUCCESS
-[INFO] ------------------------------------------------------------------------
-...
-
-# Unit test the codebase
-$ mvn test
-...
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD SUCCESS
-[INFO] ------------------------------------------------------------------------
-...
-```
-
-# Getting started guide
-
-##Installation
-
-You need to connect to our feed on [Azure DevOps](https://slb-swt.visualstudio.com/data-at-rest/ProdOps%20-%20Production%20Engineer/_packaging?feed=slb-dps&_a=feed) and add the artifact `core-lib-azure` as a dependency to your Maven or Gradle build.
-
-**Example**
+Add the repository and the dependency to the service's poms. The repository allows anonymous reads.
 
 ```xml
-<project>
-    <properties>
-        <azure.corelib.version>0.0.1</azure.corelib.version>
-    </properties>
-    <dependencies>
-        <dependency>
-            <groupId>org.opengroup.osdu</groupId>
-            <artifactId>core-lib-azure</artifactId>
-            <version>${azure.corelib.version}</version>
-        </dependency>
-    </dependencies>
-</project>
+<repositories>
+  <repository>
+    <id>spi-packages</id>
+    <url>https://spipackagesproto.z1.web.core.windows.net/maven</url>
+  </repository>
+</repositories>
+
+<dependency>
+  <groupId>org.opengroup.osdu</groupId>
+  <artifactId>core-lib-azure</artifactId>
+  <version>3.1.0</version>
+</dependency>
 ```
-- If you wish to see the code coverage report then go to job artifacts browse/target/site/jacoco and open index.html
 
-##Changes to support newly Added transaction logger and slf4jlogger
-The consumer service might run into multiple logger bindings error on start up
-which can be fixed by excluding some of the logger dependencies.
+The library brings a transaction logger and an SLF4J binding. A service that already has another binding gets a "multiple SLF4J bindings" warning at start-up; exclude the duplicate binding from whichever dependency brings it.
 
-Note: Below are reference PRs for exclusion and might change from service to service
+## Repository layout
 
-Refer this [MR](https://community.opengroup.org/osdu/platform/security-and-compliance/entitlements-azure/-/merge_requests/13) as reference on how to exclude dependencies along with how to enable the 
-Enabled transaction logger and slf4jlogger
+| Path | Contents |
+|---|---|
+| `src/main/java/org/opengroup/osdu/azure/` | One package per Azure concern: `cosmosdb`, `blobstorage`, `datalakestorage`, `servicebus`, `eventgrid`, `cache`, `partition`, `entitlements`, `legal`, `logging`, `httpconfig`, `resiliency`, `health` and others |
+| `src/main/resources/` | `common.properties`, defaults shared by every service ([guide](docs/01_Using_Common_Properties.md)) |
+| `docs/` | Usage guides |
+| `.github/` | Workflows, rulesets and Dependabot configuration |
 
-## Environment variables to be added in application.properties to consume the TenantFactoryImpl
-| name | value | description |
-| ---  | ---   | ---         |
-| `tenantInfo.container.name` | `TenantInfo` | cosmos container name |
-| `azure.cosmosdb.database` | ex `dev-osdu-r2-db` | cosmos database name |
-| `tenantFactoryImpl.required` | ex `true` | Set this property to true in order to consume TenantFactoryImpl class from core-lib-azure |
+## Build
 
-## Settings to be added in application.properties to consume the BlobStore
-| name | value | description |
-| ---  | ---   | ---         |
-| `azure.blobStore.required` | `true` | - |
-| `azure.storage.account-name` | ex `testStorage` | storage account name |
+Requires Java 17 and Maven 3.8+. `os-core-common` resolves from the OSDU community registry through the settings file in `.mvn`; the empty `CI_JOB_TOKEN` makes that read anonymous:
 
-# Default retry and timeout values for service-to-service communication
-| name | default value |
-| ---  | ---   | 
-| `maxRetry` | `3` |
-| `connectTimeout` | `60000` |
-| `requestTimeout` | `60000` |
-| `socketTimeout` | `60000` |
+```bash
+CI_JOB_TOKEN= mvn --settings .mvn/community-maven.settings.xml clean verify
+```
 
-# CircuitBreaker configuration 
-To enable circuitbreaker, set azure.circuitbreaker.enable=true in application.properties
+The jar lands at `target/core-lib-azure-<version>.jar`, and the coverage report at `target/site/jacoco/index.html`.
 
-| name | default value | description |
-| ---  | ---           | ---         |   
-| `azure.circuitbreaker.enable` | `false` | To enable circuitbreaker in your service |
-| `azure.circuitbreaker.defaultCircuitBreaker` | `false` | True if you wish to use default circuitbreaker values set by resilience4j
-| `azure.circuitbreaker.slidingWindowSize` | `50` | For COUNT_BASED, it's the number of calls to consider to calculate failure rate, for TIME_BASED, it's the number of seconds to consider to calculate failure rate.|
-| `azure.circuitbreaker.minimumNumberOfCalls` | `50` | Minimum number of calls in the slidingWindowSize to consider calculating failure rate. |
-| `azure.circuitbreaker.failureRate` | `50` | Failure threshold rate |
-| `azure.circuitbreaker.slidingWindowType` | `TIME_BASED` | TIME_BASED or COUNT_BASED |
-| `azure.circuitbreaker.permittedCallsInHalfOpenState` | `10` | Number of calls in Half Open State to decide the next state.|
+## Configuration
 
-To read more about Circuitbreaker, please refer to https://resilience4j.readme.io/docs/circuitbreaker
+A service turns features on and tunes them with application properties.
 
-## CircuitBreaker Functioning
-The basic idea behind the circuit breaker is very simple. You wrap a protected function call in a circuit breaker object, which monitors for failures. Once the failures reach a certain threshold, the circuit breaker trips, and all further calls to the circuit breaker return with an error, without the protected call being made at all.
+**Tenant factory** (`TenantFactoryImpl`):
 
-All HTTP calls made by services will go through the circuitbreaker. If circuitbreaker detects failures and it crosses threshold, The APIs will start throwing Error 500 : Service Unavailable. The circuit will be open for a certain duration and then move to half open state. It will then assess whether to move to a closed state or open state. The diagram below depicts the state diagram for circuitbreaker.
-![Alt text](docs/circuitbreakerstatediagram.png "Circuitbreaker State Diagram")
+| Property | Example | Purpose |
+|---|---|---|
+| `tenantFactoryImpl.required` | `true` | Use the library's `TenantFactoryImpl` |
+| `tenantInfo.container.name` | `TenantInfo` | Cosmos container |
+| `azure.cosmosdb.database` | `osdu-db` | Cosmos database |
 
+**Blob store**:
 
-[Credits : Martin Fowler(https://martinfowler.com/bliki/CircuitBreaker.html)]
+| Property | Example | Purpose |
+|---|---|---|
+| `azure.blobStore.required` | `true` | Create the blob store beans |
+| `azure.storage.account-name` | `<storage-account>` | Storage account |
 
+**Service-to-service HTTP**:
 
+| Property | Default |
+|---|---|
+| `azure.service.retry.config.maxRetry` | `3` |
+| `azure.service.retry.config.connectTimeout` | `60000` ms |
+| `azure.service.retry.config.requestTimeout` | `60000` ms |
+| `azure.service.retry.config.socketTimeout` | `60000` ms |
+
+**Circuit breaker**, built on [Resilience4j](https://resilience4j.readme.io/docs/circuitbreaker). When it is enabled, every HTTP call a service makes goes through it; once failures cross the threshold the circuit opens and calls fail fast with 500 Service Unavailable until a half-open probe succeeds ([state diagram](docs/circuitbreakerstatediagram.png)).
+
+| Property | Default | Purpose |
+|---|---|---|
+| `azure.circuitbreaker.enable` | `false` | Turn the circuit breaker on |
+| `azure.circuitbreaker.defaultCircuitBreaker` | `false` | Use Resilience4j's defaults instead of the values below |
+| `azure.circuitbreaker.slidingWindowType` | `TIME_BASED` | `TIME_BASED` or `COUNT_BASED` |
+| `azure.circuitbreaker.slidingWindowSize` | `50` | Seconds (time based) or calls (count based) used for the failure rate |
+| `azure.circuitbreaker.minimumNumberOfCalls` | `50` | Calls needed in the window before the rate counts |
+| `azure.circuitbreaker.failureRate` | `50` | Failure percentage that opens the circuit |
+| `azure.circuitbreaker.permittedCallsInHalfOpenState` | `10` | Calls allowed while half open |
+
+Further guides: [health check failure logging](docs/02_Enable_Logging_for_Health_Check_Fails.md) and [local development authentication](docs/03_local_api_development_guide.md).
+
+## Test
+
+| Suite | Runs in CI | Run it yourself |
+|---|---|---|
+| Unit | Pull requests and `main` (Java Build) | `mvn ... verify` from [Build](#build) |
+
+A library change is proven in a service by pinning a release in that service's fork and running its Deploy and Test lane.
+
+## Release
+
+Pull request titles follow Conventional Commits and pick the next version: `fix` is a patch, `feat` a minor, `feat!` or a `BREAKING CHANGE` footer a major. release-please keeps a release PR open; merging it tags `vX.Y.Z` and publishes the jar and pom to the Maven repository above. A released version is never replaced. [CONTRIBUTING.md](CONTRIBUTING.md) covers forcing a version and how Dependabot updates are released.
+
+## License
+
+Copyright © Microsoft Corporation
+
+Licensed under the [Apache License 2.0](LICENSE). [NOTICE](NOTICE) lists the other contributors and third-party components.
